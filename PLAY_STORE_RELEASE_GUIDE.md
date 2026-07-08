@@ -22,7 +22,7 @@ Prima di procedere:
 2. Individua la riga `applicationId = "com.example.ablob"` (riga 11).
 3. Modificala inserendo un dominio univoco di tua proprietà o una combinazione che ti identifichi, ad esempio:
    ```kotlin
-   applicationId = "com.albertobaroni.ablob"
+   applicationId = "com.alkaloon.ablob"
    ```
 4. Salva il file e sincronizza il progetto con Gradle in Android Studio.
 
