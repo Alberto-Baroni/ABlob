@@ -1,24 +1,63 @@
+import java.io.FileInputStream
+import java.util.Properties
+
 plugins {
   alias(libs.plugins.android.application)
   alias(libs.plugins.compose.compiler)
   alias(libs.plugins.kotlin.serialization)
 }
 
+// Caricamento del file di firma keystore.properties
+val keystorePropertiesFile = rootProject.file("keystore.properties")
+val keystoreProperties = Properties()
+if (keystorePropertiesFile.exists()) {
+    FileInputStream(keystorePropertiesFile).use { input ->
+        keystoreProperties.load(input)
+    }
+} else {
+    logger.warn("ATTENZIONE: File 'keystore.properties' non trovato in root. La build di Release userà la firma di Debug come fallback.")
+}
+
 android {
     namespace = "com.example.ablob"
     compileSdk = 36
     defaultConfig {
-        applicationId = "com.example.ablob"
+        applicationId = "com.alkaloon.ablob"
         minSdk = 24
         targetSdk = 36
         versionCode = 1
         versionName = "1.0"
     }
 
+    signingConfigs {
+        create("release") {
+            val keyAliasVal = keystoreProperties["keyAlias"] as? String
+            val keyPasswordVal = keystoreProperties["keyPassword"] as? String
+            val storeFileVal = keystoreProperties["storeFile"] as? String
+            val storePasswordVal = keystoreProperties["storePassword"] as? String
+
+            if (!keyAliasVal.isNullOrEmpty() && !keyPasswordVal.isNullOrEmpty() && !storeFileVal.isNullOrEmpty() && !storePasswordVal.isNullOrEmpty()) {
+                keyAlias = keyAliasVal
+                keyPassword = keyPasswordVal
+                storeFile = rootProject.file(storeFileVal)
+                storePassword = storePasswordVal
+            } else {
+                // Fallback alla firma di debug per consentire la sincronizzazione del progetto e i test
+                val debugConfig = signingConfigs.getByName("debug")
+                keyAlias = debugConfig.keyAlias
+                keyPassword = debugConfig.keyPassword
+                storeFile = debugConfig.storeFile
+                storePassword = debugConfig.storePassword
+            }
+        }
+    }
+
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            signingConfig = signingConfigs.getByName("release")
         }
     }
     compileOptions {
