@@ -16,6 +16,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -30,17 +33,25 @@ import com.example.ablob.data.SecurityManager
 import com.example.ablob.ui.browser.BrowserScreen
 import com.example.ablob.ui.login.LoginScreen
 import com.example.ablob.ui.settings.SettingsScreen
+import com.example.ablob.ui.viewer.ViewerScreen
+import androidx.compose.ui.res.stringResource
 
 @Composable
 fun MainNavigation(
     activity: FragmentActivity,
     securityManager: SecurityManager,
-    azureBlobClient: AzureBlobClient
+    azureBlobClient: AzureBlobClient,
+    currentTheme: MutableState<com.example.ablob.data.SecurityManager.AppTheme>,
+    onLanguageChange: () -> Unit
 ) {
     // Determine the initial route. If config exists, we start at Splash (biometric) or Browser. 
     // If not, we start at Login.
     val initialRoute = remember {
-        if (securityManager.hasConfig()) Splash else Login
+        if (securityManager.hasConfig()) {
+            if (securityManager.isBiometricEnabled()) Splash else Browser("")
+        } else {
+            Login
+        }
     }
 
     val backStack = rememberNavBackStack(initialRoute)
@@ -91,6 +102,7 @@ fun MainNavigation(
                 val currentPrefix = key.prefix
                 BrowserScreen(
                     azureBlobClient = azureBlobClient,
+                    securityManager = securityManager,
                     prefix = currentPrefix,
                     onNavigateToFolder = { subFolderPrefix ->
                         backStack.add(Browser(subFolderPrefix))
@@ -101,6 +113,23 @@ fun MainNavigation(
                     onSettingsClick = {
                         backStack.add(Settings)
                     },
+                    onNavigateToViewer = { path, name, contentType ->
+                        backStack.add(Viewer(path = path, name = name, contentType = contentType))
+                    },
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+
+            // Viewer Screen Route
+            entry<Viewer> { key ->
+                ViewerScreen(
+                    azureBlobClient = azureBlobClient,
+                    blobPath = key.path,
+                    fileName = key.name,
+                    contentType = key.contentType,
+                    onBackClick = {
+                        backStack.removeLastOrNull()
+                    },
                     modifier = Modifier.fillMaxSize()
                 )
             }
@@ -110,6 +139,8 @@ fun MainNavigation(
                 SettingsScreen(
                     securityManager = securityManager,
                     azureBlobClient = azureBlobClient,
+                    currentTheme = currentTheme,
+                    onLanguageChange = onLanguageChange,
                     onBackClick = {
                         backStack.removeLastOrNull()
                     },
@@ -167,15 +198,15 @@ fun SplashScreen(
 
             override fun onAuthenticationFailed() {
                 super.onAuthenticationFailed()
-                authError = "Impronta non riconosciuta. Riprova."
+                authError = activity.getString(R.string.biometric_error_not_recognized)
                 showRetryButton = true
             }
         }
 
         val promptInfo = BiometricPrompt.PromptInfo.Builder()
-            .setTitle("Accesso a ABlob")
-            .setSubtitle("Usa i dati biometrici per accedere")
-            .setNegativeButtonText("Usa credenziali")
+            .setTitle(activity.getString(R.string.biometric_prompt_title))
+            .setSubtitle(activity.getString(R.string.biometric_prompt_subtitle))
+            .setNegativeButtonText(activity.getString(R.string.biometric_prompt_negative))
             .build()
 
         val biometricPrompt = BiometricPrompt(activity, executor, callback)
@@ -186,7 +217,8 @@ fun SplashScreen(
         if (securityManager.isBiometricEnabled()) {
             triggerBiometric()
         } else {
-            // Biometrics is not enabled, directly go to browser
+            // Wait for 1.2 seconds to display the clean branding animation
+            kotlinx.coroutines.delay(1200)
             onAuthSuccess()
         }
     }
@@ -194,14 +226,7 @@ fun SplashScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(
-                Brush.verticalGradient(
-                    colors = listOf(
-                        MaterialTheme.colorScheme.primaryContainer,
-                        MaterialTheme.colorScheme.surface
-                    )
-                )
-            ),
+            .background(MaterialTheme.colorScheme.background),
         contentAlignment = Alignment.Center
     ) {
         Column(
@@ -215,29 +240,31 @@ fun SplashScreen(
                 shape = RoundedCornerShape(28.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primary)
             ) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = "AB",
-                        color = MaterialTheme.colorScheme.onPrimary,
-                        fontSize = 44.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
+                androidx.compose.foundation.Image(
+                    painter = androidx.compose.ui.res.painterResource(id = R.drawable.app_logo),
+                    contentDescription = "Logo",
+                    contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
             }
             
             Spacer(modifier = Modifier.height(24.dp))
             
             Text(
-                text = "ABlob Storage",
+                text = buildAnnotatedString {
+                    withStyle(style = SpanStyle(color = androidx.compose.ui.graphics.Color(0xFF00B0FF))) { // Cyan/azure A
+                        append("A")
+                    }
+                    withStyle(style = SpanStyle(color = MaterialTheme.colorScheme.onSurface)) {
+                        append("Blob")
+                    }
+                },
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.Bold
             )
             
             Text(
-                text = "Caricamento sicuro in corso...",
+                text = stringResource(R.string.splash_loading),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 8.dp)
@@ -285,13 +312,13 @@ fun SplashScreen(
                 ) {
                     Icon(imageVector = Icons.Default.Fingerprint, contentDescription = null)
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("Sblocca con Impronta", fontWeight = FontWeight.Bold)
+                    Text(stringResource(R.string.biometric_btn_unlock), fontWeight = FontWeight.Bold)
                 }
                 
                 Spacer(modifier = Modifier.height(12.dp))
                 
                 TextButton(onClick = onAuthFallback) {
-                    Text("Usa credenziali alternative")
+                    Text(stringResource(R.string.biometric_btn_fallback))
                 }
             } else {
                 CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)

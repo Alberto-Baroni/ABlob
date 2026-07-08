@@ -1,0 +1,170 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Common / Splash / Navigation -->
+    <string name="app_name">ABlob</string>
+    <string name="splash_loading">Caricamento sicuro in corso...</string>
+    <string name="biometric_error_not_recognized">Impronta non riconosciuta. Riprova.</string>
+    <string name="biometric_prompt_title">Accesso a ABlob</string>
+    <string name="biometric_prompt_subtitle">Usa i dati biometrici per accedere</string>
+    <string name="biometric_prompt_negative">Usa credenziali</string>
+    <string name="biometric_btn_unlock">Sblocca con Impronta</string>
+    <string name="biometric_btn_fallback">Usa credenziali alternative</string>
+
+    <!-- Login Screen -->
+    <string name="login_title">ABlob Storage</string>
+    <string name="login_subtitle">Inserisci i parametri di connessione ad Azure</string>
+    <string name="login_account_name">Nome Account Storage</string>
+    <string name="login_account_name_placeholder">es. ablobstorage</string>
+    <string name="login_container_name">Nome Container</string>
+    <string name="login_container_name_placeholder">es. documenti</string>
+    <string name="login_auth_mode">Modalità di Autenticazione</string>
+    <string name="login_tab_key">Chiave</string>
+    <string name="login_tab_sas">SAS</string>
+    <string name="login_tab_entra">Entra ID</string>
+    <string name="login_account_key">Chiave Account (Storage Key)</string>
+    <string name="login_view_key">Visualizza chiave</string>
+    <string name="login_sas_token">Token SAS</string>
+    <string name="login_sas_placeholder">\?sv=2020-08-04&amp;ss=b&amp;srt=co&amp;sp=rwdl...</string>
+    <string name="login_tenant_id">Tenant ID (Azure AD)</string>
+    <string name="login_client_id">Client ID (App Registration)</string>
+    <string name="login_client_secret">Client Secret</string>
+    <string name="login_view_secret">Visualizza segreto</string>
+    <string name="login_enable_biometric">Abilita Impronta Digitale</string>
+    <string name="login_enable_biometric_sub">Accedi rapidamente all\'avvio</string>
+    <string name="login_error_fields_required">Per favore compila tutti i campi richiesti.</string>
+    <string name="login_error_connection_failed">Connessione fallita: %s</string>
+    <string name="login_error_unknown">Errore sconosciuto</string>
+    <string name="login_btn_connect">Connetti</string>
+
+    <!-- Settings Screen -->
+    <string name="settings_title">Impostazioni</string>
+    <string name="settings_back">Indietro</string>
+    <string name="settings_active_conn">Connessione Attiva</string>
+    <string name="settings_acc_name_label">Account Name</string>
+    <string name="settings_cont_name_label">Container Name</string>
+    <string name="settings_auth_type_label">Tipo di Autenticazione</string>
+    <string name="settings_auth_shared_key">Chiave Condivisa</string>
+    <string name="settings_auth_sas">SAS Token</string>
+    <string name="settings_auth_entra">Microsoft Entra ID</string>
+    <string name="settings_security">Sicurezza</string>
+    <string name="settings_bio_login">Accesso con Impronta</string>
+    <string name="settings_bio_login_sub">Accedi senza reinserire i dati</string>
+    <string name="settings_bio_not_supported">Biometria non supportata o non configurata sul dispositivo</string>
+    <string name="settings_theme">Tema</string>
+    <string name="settings_theme_choose">Scegli il tema dell\'applicazione:</string>
+    <string name="settings_theme_system">Sistema</string>
+    <string name="settings_theme_light">Chiaro</string>
+    <string name="settings_theme_dark">Scuro</string>
+    <string name="settings_language">Lingua</string>
+    <string name="settings_language_choose">Scegli la lingua dell\'applicazione:</string>
+    <string name="settings_lang_system">Sistema</string>
+    <string name="settings_lang_it">Italiano</string>
+    <string name="settings_lang_en">Inglese</string>
+    <string name="settings_actions">Azioni</string>
+    <string name="settings_btn_edit_creds">Modifica Credenziali</string>
+    <string name="settings_btn_disconnect">Scollega Account</string>
+
+    <!-- Browser Screen -->
+    <string name="browser_title">ABlob Browser</string>
+    <string name="browser_subtitle">Container: %s</string>
+    <string name="browser_nav_up">Su di un livello</string>
+    <string name="browser_settings">Impostazioni</string>
+    <string name="browser_tab_docs">Documenti (%d)</string>
+    <string name="browser_tab_images">Immagini (%d)</string>
+    <string name="browser_tab_favorites">Preferiti (%d)</string>
+    <string name="browser_search_placeholder">Cerca nei file caricati...</string>
+    <string name="browser_btn_retry">Riprova</string>
+    <string name="browser_load_more">Carica altri 10</string>
+    <string name="browser_btn_add">Aggiungi elemento</string>
+    <string name="browser_btn_clear">Cancella</string>
+    
+    <!-- Empty States -->
+    <string name="empty_docs">Nessun documento o cartella trovata.</string>
+    <string name="empty_images">Nessuna immagine trovata.</string>
+    <string name="empty_favorites">Nessun elemento preferito in questa cartella.</string>
+
+    <!-- Toasts / Progress Actions -->
+    <string name="action_loading_external">Apertura in corso...</string>
+    <string name="action_processing">Elaborazione...</string>
+    <string name="action_upload_progress">Caricamento file %1$d di %2$d: %3$s (%4$d%%)...</string>
+    <string name="toast_upload_error">Errore nel caricamento di %s</string>
+    <string name="toast_uploads_completed">Caricamenti completati!</string>
+    <string name="action_creating_folder">Creazione cartella %s...</string>
+    <string name="toast_folder_created">Cartella creata con successo!</string>
+    <string name="toast_folder_create_error">Errore durante la creazione. Verifica i tuoi permessi su Azure.</string>
+    <string name="action_deleting_item">Eliminazione di %s...</string>
+    <string name="toast_delete_folder_not_empty">Impossibile eliminare: la cartella non è vuota.</string>
+    <string name="toast_deleted_success">Eliminato con successo!</string>
+    <string name="toast_delete_error">Errore durante l\'eliminazione. Verifica i tuoi permessi su Azure.</string>
+    <string name="action_renaming_item">Ridenominazione di %1$s in %2$s...</string>
+    <string name="toast_rename_success">Rinominato con successo!</string>
+    <string name="toast_rename_error">Errore durante la ridenominazione. Verifica i tuoi permessi.</string>
+    <string name="toast_load_error">Errore caricamento pagina: %s</string>
+    <string name="toast_download_started">Download avviato...</string>
+    <string name="toast_download_success">Scaricato con successo in Downloads!</string>
+    <string name="toast_download_error">Errore durante il download del file.</string>
+    <string name="toast_external_no_app">Nessuna applicazione installata per aprire questo file.</string>
+    <string name="toast_external_open_error">Errore durante l\'apertura del file.</string>
+    <string name="toast_external_download_error">Errore durante il download del file per l\'apertura.</string>
+
+    <!-- Dialogs -->
+    <string name="dialog_add_title">Aggiungi elemento</string>
+    <string name="dialog_add_text">Cosa vorresti creare o aggiungere nella cartella corrente?</string>
+    <string name="dialog_add_folder">Nuova cartella</string>
+    <string name="dialog_add_upload">Carica file</string>
+    <string name="dialog_folder_title">Nuova cartella</string>
+    <string name="dialog_folder_text">Inserisci il nome della nuova cartella virtuale:</string>
+    <string name="dialog_folder_label">Nome cartella</string>
+    <string name="dialog_btn_create">Crea</string>
+    <string name="dialog_btn_cancel">Annulla</string>
+    <string name="dialog_btn_save">Salva</string>
+    <string name="dialog_delete_folder_title">Elimina cartella</string>
+    <string name="dialog_delete_file_title">Elimina file</string>
+    <string name="dialog_delete_folder_confirm">Sei sicuro di voler eliminare la cartella virtuale \'%s\'? Verrà eliminata solo se è vuota.</string>
+    <string name="dialog_delete_file_confirm">Sei sicuro di voler eliminare permanentemente il file \'%s\'? Questa operazione non può essere annullata.</string>
+    <string name="dialog_btn_delete">Elimina</string>
+    <string name="dialog_rename_title">Rinomina</string>
+    <string name="dialog_rename_text">Inserisci il nuovo nome per \'%s\':</string>
+    <string name="dialog_rename_label">Nuovo nome</string>
+
+    <!-- Rows / Cards -->
+    <string name="row_virtual_folder">Cartella virtuale</string>
+    <string name="desc_favorites">Preferiti</string>
+    <string name="desc_download">Scarica</string>
+    <string name="desc_rename">Rinomina</string>
+    <string name="desc_delete">Elimina</string>
+    <string name="desc_download_file">Scarica file</string>
+    <string name="desc_rename_file">Rinomina file</string>
+    <string name="desc_delete_file">Elimina file</string>
+    <string name="desc_rename_folder">Rinomina cartella</string>
+    <string name="desc_delete_folder">Elimina cartella</string>
+
+    <!-- Viewer Screen -->
+    <string name="viewer_download_error">Errore durante il download del file</string>
+    <string name="viewer_btn_zoom_out">Rimpicciolisci testo</string>
+    <string name="viewer_btn_zoom_in">Ingrandisci testo</string>
+    <string name="viewer_loading">Download del file in corso...</string>
+    <string name="viewer_load_failed">Impossibile caricare il documento</string>
+    <string name="viewer_pdf_error">Impossibile inizializzare il renderer PDF. Il file potrebbe essere corrotto o crittografato.</string>
+    <string name="viewer_pdf_empty">Il documento PDF non contiene pagine.</string>
+    <string name="viewer_pdf_page_info">Pagina %1$d di %2$d</string>
+    <string name="viewer_pdf_prev">Pagina precedente</string>
+    <string name="viewer_pdf_next">Pagina successiva</string>
+    <string name="viewer_text_truncated">\n\n[ATTENZIONE: Documento molto grande. Visualizzazione troncata ai primi 2MB. Scarica il file per leggerlo interamente.]</string>
+    <string name="viewer_text_error">Impossibile leggere il contenuto di testo: %s</string>
+    <string name="viewer_text_hint">Tieni premuto sul testo per selezionare o copiare</string>
+
+    <!-- Legal / Disclaimer -->
+    <string name="settings_legal_title">Informazioni Legali</string>
+    <string name="settings_legal_btn">Disclaimer e Privacy</string>
+    <string name="settings_legal_btn_sub">GDPR, DSA e Esclusione di Responsabilità</string>
+    <string name="legal_dialog_title">Disclaimer Legale e Privacy</string>
+    <string name="legal_dialog_intro">Questa applicazione è distribuita gratuitamente e agisce esclusivamente come client locale collegandosi direttamente al tuo account Azure Blob Storage. Ti invitiamo a leggere attentamente le seguenti clausole.</string>
+    <string name="legal_dialog_section1_title">1. Conformità GDPR e Privacy</string>
+    <string name="legal_dialog_section1_text">L\'applicazione opera interamente a livello locale. Lo sviluppatore non raccoglie, monitora, trasmette o memorizza alcuno dei tuoi file, credenziali o dati personali su server esterni. Tutti i parametri di connessione (come chiavi di accesso o token SAS) vengono crittografati e memorizzati localmente sul tuo dispositivo. Sei tu l\'unico titolare e responsabile del trattamento dei tuoi dati.</string>
+    <string name="legal_dialog_section2_title">2. Conformità al Digital Services Act (DSA)</string>
+    <string name="legal_dialog_section2_text">L\'applicazione è puramente uno strumento di interfaccia lato client e non agisce come hosting provider, piattaforma online o moderatore di contenuti. Lo sviluppatore non memorizza, indicizza, pubblica o condivide i file o i contenuti che consulti. Sei l\'unico responsabile di garantire che tutti i dati gestiti tramite questo client siano conformi alle leggi vigenti, ai regolamenti sul copyright e non costituiscano contenuti illegali.</string>
+    <string name="legal_dialog_section3_title">3. Limitazione di Responsabilità (Diritto UE)</string>
+    <string name="legal_dialog_section3_text">Fatti salvi i casi di dolo, colpa grave, o danni alla persona (in conformità con le norme inderogabili dell\'Unione Europea a tutela dei consumatori), lo sviluppatore fornisce l\'applicazione \"così com\'è\" senza alcuna garanzia, espressa o implicita. In nessun caso lo sviluppatore sarà responsabile per la perdita di dati, interruzioni di servizio o altri danni indiretti derivanti dall\'uso o dall\'impossibilità di usare questo software.</string>
+    <string name="dialog_btn_close">Chiudi</string>
+</resources>

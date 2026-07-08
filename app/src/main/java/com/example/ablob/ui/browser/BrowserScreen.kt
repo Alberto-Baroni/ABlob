@@ -6,6 +6,9 @@ import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
 import android.widget.Toast
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -41,22 +44,34 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import coil.compose.AsyncImage
+import androidx.compose.ui.res.stringResource
+import com.example.ablob.R
 import com.example.ablob.data.AzureBlobClient
 import com.example.ablob.data.BlobItem
+import com.example.ablob.data.SecurityManager
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
+import java.io.FileOutputStream
 import java.io.IOException
+import android.content.Intent
+import android.webkit.MimeTypeMap
+import androidx.core.content.FileProvider
 import java.text.DecimalFormat
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BrowserScreen(
     azureBlobClient: AzureBlobClient,
+    securityManager: SecurityManager,
     prefix: String,
     onNavigateToFolder: (String) -> Unit,
     onNavigateUp: () -> Unit,
     onSettingsClick: () -> Unit,
+    onNavigateToViewer: (path: String, name: String, contentType: String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -73,6 +88,9 @@ fun BrowserScreen(
     
     // Lightbox state
     var activeLightboxImage by remember { mutableStateOf<BlobItem.File?>(null) }
+    
+    // External preview loader overlay
+    var isOpeningExternalFile by remember { mutableStateOf<String?>(null) }
 
     // Fetch initial list of items
     fun fetchInitial() {
@@ -92,6 +110,193 @@ fun BrowserScreen(
         }
     }
 
+    // Action overlay state
+    var isProcessingAction by remember { mutableStateOf<String?>(null) }
+
+    // Speed dial add menu / folder creation dialog states
+    var showAddMenu by remember { mutableStateOf(false) }
+    var showCreateFolderDialog by remember { mutableStateOf(false) }
+    var newFolderName by remember { mutableStateOf("") }
+    
+    // Deletion states
+    var itemToDelete by remember { mutableStateOf<BlobItem?>(null) }
+
+    // Rename states
+    var showRenameDialog by remember { mutableStateOf(false) }
+    var itemToRename by remember { mutableStateOf<BlobItem?>(null) }
+    var renameInputName by remember { mutableStateOf("") }
+
+    // Favorites tick to trigger recomposition
+    var favoritesTick by remember { mutableStateOf(0) }
+
+    val multiFilePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetMultipleContents()
+    ) { uris: List<Uri> ->
+        if (uris.isNotEmpty()) {
+            coroutineScope.launch {
+                val totalCount = uris.size
+                uris.forEachIndexed { index, uri ->
+                    val fileInfo = getFileInfoFromUri(context, uri)
+                    if (fileInfo != null) {
+                        isProcessingAction = context.getString(R.string.action_upload_progress, index + 1, totalCount, fileInfo.name, 0)
+                        
+                        val uploadSuccess = withContext(Dispatchers.IO) {
+                            var tempFile: File? = null
+                            try {
+                                val prefixName = "up_${System.currentTimeMillis()}_"
+                                val ext = fileInfo.name.substringAfterLast('.', "tmp")
+                                tempFile = File.createTempFile(prefixName, ".$ext", context.cacheDir)
+                                
+                                context.contentResolver.openInputStream(uri)?.use { input ->
+                                    FileOutputStream(tempFile).use { output ->
+                                        input.copyTo(output)
+                                    }
+                                } ?: throw IOException("ContentResolver failed to open stream")
+                                
+                                val targetBlobPath = "$prefix${fileInfo.name}"
+                                
+                                azureBlobClient.uploadBlob(targetBlobPath, tempFile, fileInfo.mimeType) { bytesWritten, totalBytes ->
+                                    val percent = if (totalBytes > 0) (bytesWritten * 100 / totalBytes).toInt() else 0
+                                    isProcessingAction = context.getString(R.string.action_upload_progress, index + 1, totalCount, fileInfo.name, percent)
+                                }
+                                true
+                            } catch (e: Exception) {
+                                e.printStackTrace()
+                                false
+                            } finally {
+                                tempFile?.delete()
+                            }
+                        }
+                        
+                        if (!uploadSuccess) {
+                            Toast.makeText(context, context.getString(R.string.toast_upload_error, fileInfo.name), Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                }
+                
+                isProcessingAction = null
+                Toast.makeText(context, context.getString(R.string.toast_uploads_completed), Toast.LENGTH_SHORT).show()
+                fetchInitial()
+            }
+        }
+    }
+
+    fun createFolder(name: String) {
+        val trimmed = name.trim()
+        if (trimmed.isEmpty()) return
+        
+        val cleanName = trimmed.replace("^/+|/+$".toRegex(), "")
+        if (cleanName.isEmpty()) return
+        
+        isProcessingAction = context.getString(R.string.action_creating_folder, cleanName)
+        coroutineScope.launch {
+            val success = withContext(Dispatchers.IO) {
+                try {
+                    val folderBlobPath = "$prefix$cleanName/"
+                    azureBlobClient.createVirtualFolder(folderBlobPath)
+                    true
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                    false
+                }
+            }
+            
+            isProcessingAction = null
+            if (success) {
+                Toast.makeText(context, context.getString(R.string.toast_folder_created), Toast.LENGTH_SHORT).show()
+                fetchInitial()
+            } else {
+                Toast.makeText(context, context.getString(R.string.toast_folder_create_error), Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    fun deleteItem(item: BlobItem) {
+        coroutineScope.launch {
+            isProcessingAction = context.getString(R.string.action_deleting_item, item.name)
+            
+            if (item is BlobItem.Folder) {
+                val isEmpty = withContext(Dispatchers.IO) {
+                    try {
+                        val result = azureBlobClient.listBlobs(prefix = item.path, delimiter = "/", maxResults = 1)
+                        result.items.isEmpty()
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                        false
+                    }
+                }
+                
+                if (!isEmpty) {
+                    isProcessingAction = null
+                    Toast.makeText(context, context.getString(R.string.toast_delete_folder_not_empty), Toast.LENGTH_LONG).show()
+                    return@launch
+                }
+            }
+            
+            val success = withContext(Dispatchers.IO) {
+                try {
+                    azureBlobClient.deleteBlob(item.path)
+                    true
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                    false
+                }
+            }
+            
+            isProcessingAction = null
+            if (success) {
+                if (securityManager.isFavorite(item.path)) {
+                    securityManager.toggleFavorite(item.path)
+                    favoritesTick++
+                }
+                Toast.makeText(context, context.getString(R.string.toast_deleted_success), Toast.LENGTH_SHORT).show()
+                fetchInitial()
+            } else {
+                Toast.makeText(context, context.getString(R.string.toast_delete_error), Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    fun renameItem(item: BlobItem, newName: String) {
+        val trimmed = newName.trim()
+        if (trimmed.isEmpty() || trimmed == item.name) return
+        
+        coroutineScope.launch {
+            isProcessingAction = context.getString(R.string.action_renaming_item, item.name, trimmed)
+            
+            val newPath = if (item is BlobItem.Folder) {
+                val parentPrefix = item.path.substringBeforeLast(item.name + "/")
+                "$parentPrefix$trimmed/"
+            } else {
+                val parentPrefix = item.path.substringBeforeLast(item.name)
+                "$parentPrefix$trimmed"
+            }
+            
+            val success = withContext(Dispatchers.IO) {
+                try {
+                    azureBlobClient.renameBlob(item.path, newPath)
+                    true
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                    false
+                }
+            }
+            
+            isProcessingAction = null
+            if (success) {
+                if (securityManager.isFavorite(item.path)) {
+                    securityManager.toggleFavorite(item.path)
+                    securityManager.toggleFavorite(newPath)
+                    favoritesTick++
+                }
+                Toast.makeText(context, context.getString(R.string.toast_rename_success), Toast.LENGTH_SHORT).show()
+                fetchInitial()
+            } else {
+                Toast.makeText(context, context.getString(R.string.toast_rename_error), Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
     // Load next page
     fun fetchNextPage() {
         if (nextMarker.isEmpty() || isLoadingMore) return
@@ -103,7 +308,7 @@ fun BrowserScreen(
                 nextMarker = result.nextMarker
             } catch (e: Exception) {
                 e.printStackTrace()
-                Toast.makeText(context, "Errore caricamento pagina: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, context.getString(R.string.toast_load_error, e.localizedMessage ?: ""), Toast.LENGTH_SHORT).show()
             } finally {
                 isLoadingMore = false
             }
@@ -144,6 +349,13 @@ fun BrowserScreen(
         }
     }
 
+    val favoriteItems = remember(loadedItems, searchQuery, favoritesTick) {
+        loadedItems.filter { item ->
+            val nameMatches = item.name.contains(searchQuery, ignoreCase = true)
+            nameMatches && securityManager.isFavorite(item.path)
+        }
+    }
+
     Scaffold(
         topBar = {
             Column {
@@ -151,12 +363,12 @@ fun BrowserScreen(
                     title = {
                         Column {
                             Text(
-                                text = "ABlob Browser",
+                                text = stringResource(R.string.browser_title),
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 20.sp
                             )
                             Text(
-                                text = "Container: ${azureBlobClient.getCurrentConfig().containerName}",
+                                text = stringResource(R.string.browser_subtitle, azureBlobClient.getCurrentConfig().containerName),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -165,7 +377,7 @@ fun BrowserScreen(
                     navigationIcon = {
                         if (prefix.isNotEmpty()) {
                             IconButton(onClick = onNavigateUp) {
-                                Icon(imageVector = Icons.Default.ArrowBack, contentDescription = "Su di un livello")
+                                Icon(imageVector = Icons.Default.ArrowBack, contentDescription = stringResource(R.string.browser_nav_up))
                             }
                         } else {
                             IconButton(onClick = { /* No-op, root */ }, enabled = false) {
@@ -175,7 +387,7 @@ fun BrowserScreen(
                     },
                     actions = {
                         IconButton(onClick = onSettingsClick) {
-                            Icon(imageVector = Icons.Default.Settings, contentDescription = "Impostazioni")
+                            Icon(imageVector = Icons.Default.Settings, contentDescription = stringResource(R.string.browser_settings))
                         }
                     }
                 )
@@ -194,7 +406,7 @@ fun BrowserScreen(
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(imageVector = Icons.Default.Description, contentDescription = null, modifier = Modifier.size(18.dp))
                                 Spacer(modifier = Modifier.width(6.dp))
-                                Text("Documenti (${filteredDocuments.size})")
+                                Text(stringResource(R.string.browser_tab_docs, filteredDocuments.size))
                             }
                         }
                     )
@@ -205,7 +417,18 @@ fun BrowserScreen(
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(imageVector = Icons.Default.Image, contentDescription = null, modifier = Modifier.size(18.dp))
                                 Spacer(modifier = Modifier.width(6.dp))
-                                Text("Immagini (${filteredImages.size})")
+                                Text(stringResource(R.string.browser_tab_images, filteredImages.size))
+                            }
+                        }
+                    )
+                    Tab(
+                        selected = selectedTab == 2,
+                        onClick = { selectedTab = 2 },
+                        text = {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(imageVector = Icons.Default.Star, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(stringResource(R.string.browser_tab_favorites, favoriteItems.size))
                             }
                         }
                     )
@@ -215,12 +438,12 @@ fun BrowserScreen(
                 OutlinedTextField(
                     value = searchQuery,
                     onValueChange = { searchQuery = it },
-                    placeholder = { Text("Cerca nei file caricati...") },
+                    placeholder = { Text(stringResource(R.string.browser_search_placeholder)) },
                     leadingIcon = { Icon(imageVector = Icons.Default.Search, contentDescription = null) },
                     trailingIcon = {
                         if (searchQuery.isNotEmpty()) {
                             IconButton(onClick = { searchQuery = "" }) {
-                                Icon(imageVector = Icons.Default.Close, contentDescription = "Cancella")
+                                Icon(imageVector = Icons.Default.Close, contentDescription = stringResource(R.string.browser_btn_clear))
                             }
                         }
                     },
@@ -230,6 +453,15 @@ fun BrowserScreen(
                         .padding(horizontal = 16.dp, vertical = 8.dp),
                     shape = RoundedCornerShape(12.dp)
                 )
+            }
+        },
+        floatingActionButton = {
+            FloatingActionButton(
+                onClick = { showAddMenu = true },
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary
+            ) {
+                Icon(imageVector = Icons.Default.Add, contentDescription = stringResource(R.string.browser_btn_add))
             }
         }
     ) { innerPadding ->
@@ -265,13 +497,15 @@ fun BrowserScreen(
                     )
                     Spacer(modifier = Modifier.height(16.dp))
                     Button(onClick = { fetchInitial() }) {
-                        Text("Riprova")
+                        Text(stringResource(R.string.browser_btn_retry))
                     }
                 }
             } else if (selectedTab == 0 && filteredDocuments.isEmpty()) {
-                EmptyStateView(message = "Nessun documento o cartella trovata.")
+                EmptyStateView(message = stringResource(R.string.empty_docs))
             } else if (selectedTab == 1 && filteredImages.isEmpty()) {
-                EmptyStateView(message = "Nessuna immagine trovata.")
+                EmptyStateView(message = stringResource(R.string.empty_images))
+            } else if (selectedTab == 2 && favoriteItems.isEmpty()) {
+                EmptyStateView(message = stringResource(R.string.empty_favorites))
             } else {
                 if (selectedTab == 0) {
                     // Documents and Folders list
@@ -283,16 +517,38 @@ fun BrowserScreen(
                         items(filteredDocuments) { item ->
                             DocumentRow(
                                 item = item,
+                                isFavorite = securityManager.isFavorite(item.path),
+                                onFavoriteToggle = {
+                                    securityManager.toggleFavorite(item.path)
+                                    favoritesTick++
+                                },
                                 onClick = {
                                     if (item is BlobItem.Folder) {
                                         onNavigateToFolder(item.path)
+                                    } else if (item is BlobItem.File) {
+                                        if (isInternalDocument(item.name, item.contentType)) {
+                                            onNavigateToViewer(item.path, item.name, item.contentType)
+                                        } else {
+                                            openFileExternally(context, azureBlobClient, item, coroutineScope) { loadingName ->
+                                                isOpeningExternalFile = loadingName
+                                            }
+                                        }
                                     }
                                 },
                                 onDownload = {
                                     if (item is BlobItem.File) {
                                         downloadFile(context, azureBlobClient, item, coroutineScope)
                                     }
-                                }
+                                },
+                                onDelete = {
+                                    itemToDelete = item
+                                },
+                                onRename = {
+                                    itemToRename = item
+                                    renameInputName = item.name
+                                    showRenameDialog = true
+                                },
+                                searchQuery = searchQuery
                             )
                         }
 
@@ -316,7 +572,7 @@ fun BrowserScreen(
                             }
                         }
                     }
-                } else {
+                } else if (selectedTab == 1) {
                     // Images Grid Gallery
                     LazyVerticalGrid(
                         columns = GridCells.Fixed(2),
@@ -329,12 +585,26 @@ fun BrowserScreen(
                             ImageGalleryCard(
                                 imageFile = imageFile,
                                 azureBlobClient = azureBlobClient,
+                                isFavorite = securityManager.isFavorite(imageFile.path),
+                                onFavoriteToggle = {
+                                    securityManager.toggleFavorite(imageFile.path)
+                                    favoritesTick++
+                                },
                                 onClick = {
                                     activeLightboxImage = imageFile
                                 },
                                 onDownload = {
                                     downloadFile(context, azureBlobClient, imageFile, coroutineScope)
-                                }
+                                },
+                                onDelete = {
+                                    itemToDelete = imageFile
+                                },
+                                onRename = {
+                                    itemToRename = imageFile
+                                    renameInputName = imageFile.name
+                                    showRenameDialog = true
+                                },
+                                searchQuery = searchQuery
                             )
                         }
 
@@ -358,6 +628,51 @@ fun BrowserScreen(
                             }
                         }
                     }
+                } else {
+                    // Favorites Tab combined view
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(favoriteItems) { item ->
+                            DocumentRow(
+                                item = item,
+                                isFavorite = true,
+                                onFavoriteToggle = {
+                                    securityManager.toggleFavorite(item.path)
+                                    favoritesTick++
+                                },
+                                onClick = {
+                                    if (item is BlobItem.Folder) {
+                                        onNavigateToFolder(item.path)
+                                    } else if (item is BlobItem.File) {
+                                        if (isInternalDocument(item.name, item.contentType)) {
+                                            onNavigateToViewer(item.path, item.name, item.contentType)
+                                        } else {
+                                            openFileExternally(context, azureBlobClient, item, coroutineScope) { loadingName ->
+                                                isOpeningExternalFile = loadingName
+                                            }
+                                        }
+                                    }
+                                },
+                                onDownload = {
+                                    if (item is BlobItem.File) {
+                                        downloadFile(context, azureBlobClient, item, coroutineScope)
+                                    }
+                                },
+                                onDelete = {
+                                    itemToDelete = item
+                                },
+                                onRename = {
+                                    itemToRename = item
+                                    renameInputName = item.name
+                                    showRenameDialog = true
+                                },
+                                searchQuery = searchQuery
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -374,6 +689,265 @@ fun BrowserScreen(
             }
         )
     }
+
+    // Progress Dialog Overlay for External Opening
+    if (isOpeningExternalFile != null) {
+        Dialog(
+            onDismissRequest = { /* Prevent dismiss during download */ },
+            properties = DialogProperties(
+                dismissOnBackPress = false,
+                dismissOnClickOutside = false
+            )
+        ) {
+            Card(
+                modifier = Modifier.width(280.dp),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+            ) {
+                Column(
+                    modifier = Modifier.padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                    Spacer(modifier = Modifier.height(20.dp))
+                    Text(
+                        text = stringResource(R.string.action_loading_external),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = isOpeningExternalFile ?: "",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center
+                    )
+                }
+            }
+        }
+    }
+
+    // Choice Dialog: Upload File or Create Folder
+    if (showAddMenu) {
+        AlertDialog(
+            onDismissRequest = { showAddMenu = false },
+            title = { Text(stringResource(R.string.dialog_add_title)) },
+            text = { Text(stringResource(R.string.dialog_add_text)) },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showAddMenu = false
+                        newFolderName = ""
+                        showCreateFolderDialog = true
+                    }
+                ) {
+                    Text(stringResource(R.string.dialog_add_folder))
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showAddMenu = false
+                        multiFilePickerLauncher.launch("*/*")
+                    }
+                ) {
+                    Text(stringResource(R.string.dialog_add_upload))
+                }
+            }
+        )
+    }
+
+    // Input Dialog: Create Folder Name
+    if (showCreateFolderDialog) {
+        AlertDialog(
+            onDismissRequest = { showCreateFolderDialog = false },
+            title = { Text(stringResource(R.string.dialog_folder_title)) },
+            text = {
+                Column {
+                    Text(stringResource(R.string.dialog_folder_text))
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = newFolderName,
+                        onValueChange = { newFolderName = it },
+                        label = { Text(stringResource(R.string.dialog_folder_label)) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showCreateFolderDialog = false
+                        createFolder(newFolderName)
+                    },
+                    enabled = newFolderName.trim().isNotEmpty()
+                ) {
+                    Text(stringResource(R.string.dialog_btn_create))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showCreateFolderDialog = false }) {
+                    Text(stringResource(R.string.dialog_btn_cancel))
+                }
+            }
+        )
+    }
+
+    // Confirm Dialog: Delete File or Folder
+    itemToDelete?.let { item ->
+        AlertDialog(
+            onDismissRequest = { itemToDelete = null },
+            title = { Text(if (item is BlobItem.Folder) stringResource(R.string.dialog_delete_folder_title) else stringResource(R.string.dialog_delete_file_title)) },
+            text = {
+                Text(
+                    if (item is BlobItem.Folder) {
+                        stringResource(R.string.dialog_delete_folder_confirm, item.name)
+                    } else {
+                        stringResource(R.string.dialog_delete_file_confirm, item.name)
+                    }
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        itemToDelete = null
+                        deleteItem(item)
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text(stringResource(R.string.dialog_btn_delete), color = MaterialTheme.colorScheme.onError)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { itemToDelete = null }) {
+                    Text(stringResource(R.string.dialog_btn_cancel))
+                }
+            }
+        )
+    }
+
+    // Input Dialog: Rename File or Folder
+    if (showRenameDialog) {
+        AlertDialog(
+            onDismissRequest = { showRenameDialog = false },
+            title = { Text(stringResource(R.string.dialog_rename_title)) },
+            text = {
+                Column {
+                    Text(stringResource(R.string.dialog_rename_text, itemToRename?.name ?: ""))
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = renameInputName,
+                        onValueChange = { renameInputName = it },
+                        label = { Text(stringResource(R.string.dialog_rename_label)) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showRenameDialog = false
+                        itemToRename?.let { renameItem(it, renameInputName) }
+                    },
+                    enabled = renameInputName.trim().isNotEmpty() && renameInputName.trim() != itemToRename?.name
+                ) {
+                    Text(stringResource(R.string.dialog_btn_save))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showRenameDialog = false }) {
+                    Text(stringResource(R.string.dialog_btn_cancel))
+                }
+            }
+        )
+    }
+
+    // Unified Action Progress Dialog Overlay
+    if (isProcessingAction != null) {
+        Dialog(
+            onDismissRequest = { /* Prevent dismiss during action */ },
+            properties = DialogProperties(
+                dismissOnBackPress = false,
+                dismissOnClickOutside = false
+            )
+        ) {
+            Card(
+                modifier = Modifier.width(280.dp),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+            ) {
+                Column(
+                    modifier = Modifier.padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                    Spacer(modifier = Modifier.height(20.dp))
+                    Text(
+                        text = stringResource(R.string.action_processing),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = isProcessingAction ?: "",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun HighlightedText(
+    text: String,
+    query: String,
+    style: androidx.compose.ui.text.TextStyle,
+    highlightColor: Color = Color.Yellow,
+    textColor: Color = Color.Unspecified,
+    maxLines: Int = Int.MAX_VALUE,
+    overflow: TextOverflow = TextOverflow.Clip
+) {
+    val annotatedString = remember(text, query) {
+        if (query.isEmpty() || !text.contains(query, ignoreCase = true)) {
+            AnnotatedString(text)
+        } else {
+            val builder = AnnotatedString.Builder()
+            var startIdx = 0
+            val lowerText = text.lowercase()
+            val lowerQuery = query.lowercase()
+            
+            while (true) {
+                val idx = lowerText.indexOf(lowerQuery, startIdx)
+                if (idx == -1) {
+                    builder.append(text.substring(startIdx))
+                    break
+                }
+                builder.append(text.substring(startIdx, idx))
+                builder.pushStyle(SpanStyle(background = highlightColor, color = Color.Black))
+                builder.append(text.substring(idx, idx + query.length))
+                builder.pop()
+                startIdx = idx + query.length
+            }
+            builder.toAnnotatedString()
+        }
+    }
+    
+    Text(
+        text = annotatedString,
+        style = style,
+        color = textColor,
+        maxLines = maxLines,
+        overflow = overflow
+    )
 }
 
 @Composable
@@ -423,8 +997,13 @@ fun BreadcrumbsView(
 @Composable
 fun DocumentRow(
     item: BlobItem,
+    isFavorite: Boolean,
+    onFavoriteToggle: () -> Unit,
     onClick: () -> Unit,
-    onDownload: () -> Unit
+    onDownload: () -> Unit,
+    onDelete: () -> Unit,
+    onRename: () -> Unit,
+    searchQuery: String
 ) {
     Card(
         modifier = Modifier
@@ -451,10 +1030,10 @@ fun DocumentRow(
             Spacer(modifier = Modifier.width(16.dp))
             
             Column(modifier = Modifier.weight(1f)) {
-                Text(
+                HighlightedText(
                     text = item.name,
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = 15.sp,
+                    query = searchQuery,
+                    style = LocalTextStyle.current.copy(fontWeight = FontWeight.SemiBold, fontSize = 15.sp),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -466,22 +1045,59 @@ fun DocumentRow(
                     )
                 } else {
                     Text(
-                        text = "Cartella virtuale",
+                        text = stringResource(R.string.row_virtual_folder),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
+            }
+
+            IconButton(onClick = onFavoriteToggle) {
+                Icon(
+                    imageVector = if (isFavorite) Icons.Default.Star else Icons.Default.StarBorder,
+                    contentDescription = stringResource(R.string.desc_favorites),
+                    tint = if (isFavorite) Color(0xFFFFC107) else MaterialTheme.colorScheme.outline,
+                    modifier = Modifier.size(22.dp)
+                )
             }
             
             if (item is BlobItem.File) {
                 IconButton(onClick = onDownload) {
                     Icon(
                         imageVector = Icons.Default.FileDownload,
-                        contentDescription = "Scarica file",
+                        contentDescription = stringResource(R.string.desc_download_file),
                         tint = MaterialTheme.colorScheme.primary
                     )
                 }
+                IconButton(onClick = onRename) {
+                    Icon(
+                        imageVector = Icons.Default.Edit,
+                        contentDescription = stringResource(R.string.desc_rename_file),
+                        tint = MaterialTheme.colorScheme.secondary
+                    )
+                }
+                IconButton(onClick = onDelete) {
+                    Icon(
+                        imageVector = Icons.Default.Delete,
+                        contentDescription = stringResource(R.string.desc_delete_file),
+                        tint = MaterialTheme.colorScheme.error
+                    )
+                }
             } else {
+                IconButton(onClick = onRename) {
+                    Icon(
+                        imageVector = Icons.Default.Edit,
+                        contentDescription = stringResource(R.string.desc_rename_folder),
+                        tint = MaterialTheme.colorScheme.secondary
+                    )
+                }
+                IconButton(onClick = onDelete) {
+                    Icon(
+                        imageVector = Icons.Default.Delete,
+                        contentDescription = stringResource(R.string.desc_delete_folder),
+                        tint = MaterialTheme.colorScheme.error
+                    )
+                }
                 Icon(
                     imageVector = Icons.Default.ChevronRight,
                     contentDescription = null,
@@ -497,8 +1113,13 @@ fun DocumentRow(
 fun ImageGalleryCard(
     imageFile: BlobItem.File,
     azureBlobClient: AzureBlobClient,
+    isFavorite: Boolean,
+    onFavoriteToggle: () -> Unit,
     onClick: () -> Unit,
-    onDownload: () -> Unit
+    onDownload: () -> Unit,
+    onDelete: () -> Unit,
+    onRename: () -> Unit,
+    searchQuery: String
 ) {
     // Generate secure query URL
     val config = azureBlobClient.getCurrentConfig()
@@ -538,11 +1159,11 @@ fun ImageGalleryCard(
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Text(
+                        HighlightedText(
                             text = imageFile.name,
-                            color = Color.White,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold,
+                            query = searchQuery,
+                            style = LocalTextStyle.current.copy(fontSize = 12.sp, fontWeight = FontWeight.Bold),
+                            textColor = Color.White,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
@@ -552,15 +1173,56 @@ fun ImageGalleryCard(
                             fontSize = 10.sp
                         )
                     }
+                    IconButton(
+                        onClick = onFavoriteToggle,
+                        modifier = Modifier.size(24.dp)
+                    ) {
+                        Icon(
+                            imageVector = if (isFavorite) Icons.Default.Star else Icons.Default.StarBorder,
+                            contentDescription = stringResource(R.string.desc_favorites),
+                            tint = if (isFavorite) Color(0xFFFFC107) else Color.White,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                    
+                    Spacer(modifier = Modifier.width(4.dp))
                     
                     IconButton(
                         onClick = onDownload,
-                        modifier = Modifier.size(28.dp)
+                        modifier = Modifier.size(24.dp)
                     ) {
                         Icon(
                             imageVector = Icons.Default.FileDownload,
-                            contentDescription = "Scarica",
+                            contentDescription = stringResource(R.string.desc_download),
                             tint = Color.White,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                    
+                    Spacer(modifier = Modifier.width(4.dp))
+ 
+                    IconButton(
+                        onClick = onRename,
+                        modifier = Modifier.size(24.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Edit,
+                            contentDescription = stringResource(R.string.desc_rename),
+                            tint = Color.White,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                    
+                    Spacer(modifier = Modifier.width(4.dp))
+                    
+                    IconButton(
+                        onClick = onDelete,
+                        modifier = Modifier.size(24.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Delete,
+                            contentDescription = stringResource(R.string.desc_delete),
+                            tint = Color.Red,
                             modifier = Modifier.size(18.dp)
                         )
                     }
@@ -640,7 +1302,7 @@ fun LightboxDialog(
                         containerColor = Color.Black.copy(alpha = 0.5f)
                     )
                 ) {
-                    Icon(imageVector = Icons.Default.Close, contentDescription = "Chiudi", tint = Color.White)
+                    Icon(imageVector = Icons.Default.Close, contentDescription = stringResource(R.string.dialog_btn_cancel), tint = Color.White)
                 }
 
                 Text(
@@ -661,7 +1323,7 @@ fun LightboxDialog(
                         containerColor = Color.Black.copy(alpha = 0.5f)
                     )
                 ) {
-                    Icon(imageVector = Icons.Default.FileDownload, contentDescription = "Scarica", tint = Color.White)
+                    Icon(imageVector = Icons.Default.FileDownload, contentDescription = stringResource(R.string.desc_download), tint = Color.White)
                 }
             }
         }
@@ -720,7 +1382,7 @@ private fun downloadFile(
     file: BlobItem.File,
     coroutineScope: kotlinx.coroutines.CoroutineScope
 ) {
-    Toast.makeText(context, "Download avviato...", Toast.LENGTH_SHORT).show()
+    Toast.makeText(context, context.getString(R.string.toast_download_started), Toast.LENGTH_SHORT).show()
     
     coroutineScope.launch {
         val success = withContext(Dispatchers.IO) {
@@ -763,9 +1425,108 @@ private fun downloadFile(
         }
         
         if (success) {
-            Toast.makeText(context, "Scaricato con successo in Downloads!", Toast.LENGTH_LONG).show()
+            Toast.makeText(context, context.getString(R.string.toast_download_success), Toast.LENGTH_LONG).show()
         } else {
-            Toast.makeText(context, "Errore durante il download del file.", Toast.LENGTH_LONG).show()
+            Toast.makeText(context, context.getString(R.string.toast_download_error), Toast.LENGTH_LONG).show()
         }
     }
+}
+
+private fun isInternalDocument(fileName: String, contentType: String): Boolean {
+    val mime = contentType.lowercase()
+    if (mime == "application/pdf" || fileName.endsWith(".pdf", ignoreCase = true)) return true
+    if (mime == "application/json" || fileName.endsWith(".json", ignoreCase = true)) return true
+    if (mime == "text/plain" || fileName.endsWith(".txt", ignoreCase = true)) return true
+    return false
+}
+
+private fun openFileExternally(
+    context: Context,
+    azureBlobClient: AzureBlobClient,
+    file: BlobItem.File,
+    coroutineScope: kotlinx.coroutines.CoroutineScope,
+    onProgress: (String?) -> Unit
+) {
+    onProgress(file.name)
+    coroutineScope.launch {
+        val tempFile = withContext(Dispatchers.IO) {
+            try {
+                val responseBody = azureBlobClient.downloadBlob(file.path)
+                val ext = file.name.substringAfterLast('.', "tmp")
+                val safeName = file.name.replace("[^a-zA-Z0-9.-]".toRegex(), "_")
+                val temp = File.createTempFile("ext_${safeName.substringBeforeLast(".")}_", ".$ext", context.cacheDir)
+                temp.deleteOnExit()
+                responseBody.byteStream().use { input ->
+                    FileOutputStream(temp).use { output ->
+                        val buffer = ByteArray(8192)
+                        var read: Int
+                        while (input.read(buffer).also { read = it } != -1) {
+                            output.write(buffer, 0, read)
+                        }
+                    }
+                }
+                temp
+            } catch (e: Exception) {
+                e.printStackTrace()
+                null
+            }
+        }
+
+        onProgress(null)
+        if (tempFile != null) {
+            try {
+                val authority = "${context.packageName}.fileprovider"
+                val uri = androidx.core.content.FileProvider.getUriForFile(context, authority, tempFile)
+                
+                val mimeType = if (file.contentType.isNotEmpty() && file.contentType != "application/octet-stream") {
+                    file.contentType
+                } else {
+                    val fileExt = file.name.substringAfterLast('.', "").lowercase()
+                    android.webkit.MimeTypeMap.getSingleton().getMimeTypeFromExtension(fileExt) ?: "*/*"
+                }
+ 
+                val intent = Intent(Intent.ACTION_VIEW).apply {
+                    setDataAndType(uri, mimeType)
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                context.startActivity(intent)
+            } catch (e: android.content.ActivityNotFoundException) {
+                Toast.makeText(context, context.getString(R.string.toast_external_no_app), Toast.LENGTH_LONG).show()
+            } catch (e: Exception) {
+                e.printStackTrace()
+                Toast.makeText(context, context.getString(R.string.toast_external_open_error), Toast.LENGTH_LONG).show()
+            }
+        } else {
+            Toast.makeText(context, context.getString(R.string.toast_external_download_error), Toast.LENGTH_LONG).show()
+        }
+    }
+}
+
+private data class SelectedFileInfo(
+    val name: String,
+    val size: Long,
+    val mimeType: String
+)
+
+private fun getFileInfoFromUri(context: Context, uri: Uri): SelectedFileInfo? {
+    var name = ""
+    var size: Long = 0
+    val mimeType = context.contentResolver.getType(uri) ?: "application/octet-stream"
+
+    val cursor = context.contentResolver.query(uri, null, null, null, null)
+    cursor?.use {
+        if (it.moveToFirst()) {
+            val nameIndex = it.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+            val sizeIndex = it.getColumnIndex(android.provider.OpenableColumns.SIZE)
+            if (nameIndex != -1) name = it.getString(nameIndex)
+            if (sizeIndex != -1) size = it.getLong(sizeIndex)
+        }
+    }
+
+    if (name.isEmpty()) {
+        name = uri.path?.substringAfterLast('/') ?: "file"
+    }
+
+    return SelectedFileInfo(name, size, mimeType)
 }

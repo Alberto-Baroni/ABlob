@@ -19,6 +19,10 @@ class SecurityManager(private val context: Context) {
         )
     }
 
+    private val plainPrefs: SharedPreferences by lazy {
+        context.getSharedPreferences("ablob_settings", Context.MODE_PRIVATE)
+    }
+
     fun saveConfig(config: StorageConfig) {
         sharedPrefs.edit().apply {
             putString("account_name", config.accountName)
@@ -76,5 +80,47 @@ class SecurityManager(private val context: Context) {
 
     fun isBiometricEnabled(): Boolean {
         return loadConfig().useBiometrics && isBiometricHardwareAvailable()
+    }
+
+    enum class AppTheme { SYSTEM, LIGHT, DARK }
+
+    fun getTheme(): AppTheme {
+        val name = plainPrefs.getString("app_theme", null)
+            ?: sharedPrefs.getString("app_theme", AppTheme.SYSTEM.name)
+            ?: AppTheme.SYSTEM.name
+        return try { AppTheme.valueOf(name) } catch (e: Exception) { AppTheme.SYSTEM }
+    }
+
+    fun setTheme(theme: AppTheme) {
+        plainPrefs.edit().putString("app_theme", theme.name).apply()
+    }
+
+    enum class AppLanguage { SYSTEM, IT, EN }
+
+    fun getLanguage(): AppLanguage {
+        val name = plainPrefs.getString("app_language", AppLanguage.SYSTEM.name) ?: AppLanguage.SYSTEM.name
+        return try { AppLanguage.valueOf(name) } catch (e: Exception) { AppLanguage.SYSTEM }
+    }
+
+    fun setLanguage(language: AppLanguage) {
+        plainPrefs.edit().putString("app_language", language.name).apply()
+    }
+
+    fun getFavorites(): Set<String> {
+        return sharedPrefs.getStringSet("favorite_blobs", emptySet()) ?: emptySet()
+    }
+
+    fun toggleFavorite(path: String) {
+        val current = getFavorites().toMutableSet()
+        if (current.contains(path)) {
+            current.remove(path)
+        } else {
+            current.add(path)
+        }
+        sharedPrefs.edit().putStringSet("favorite_blobs", current).apply()
+    }
+
+    fun isFavorite(path: String): Boolean {
+        return getFavorites().contains(path)
     }
 }

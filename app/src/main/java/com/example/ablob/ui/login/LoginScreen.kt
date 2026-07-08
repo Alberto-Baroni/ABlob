@@ -28,6 +28,9 @@ import com.example.ablob.data.AzureBlobClient
 import com.example.ablob.data.SecurityManager
 import com.example.ablob.data.StorageConfig
 import kotlinx.coroutines.launch
+import androidx.compose.ui.res.stringResource
+import com.example.ablob.R
+import androidx.compose.ui.platform.LocalContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -37,6 +40,7 @@ fun LoginScreen(
     onLoginSuccess: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     var accountName by remember { mutableStateOf("") }
     var containerName by remember { mutableStateOf("") }
@@ -93,7 +97,7 @@ fun LoginScreen(
                 .statusBarsPadding()
                 .navigationBarsPadding()
                 .verticalScroll(rememberScrollState())
-                .padding(24.dp),
+                .padding(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
@@ -105,17 +109,12 @@ fun LoginScreen(
                 shape = RoundedCornerShape(24.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primary)
             ) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = "AB",
-                        color = MaterialTheme.colorScheme.onPrimary,
-                        fontSize = 38.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
+                androidx.compose.foundation.Image(
+                    painter = androidx.compose.ui.res.painterResource(id = com.example.ablob.R.drawable.app_logo),
+                    contentDescription = "Logo",
+                    contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
             }
             
             Spacer(modifier = Modifier.height(16.dp))
@@ -128,7 +127,7 @@ fun LoginScreen(
             )
             
             Text(
-                text = "Inserisci i parametri di connessione ad Azure",
+                text = stringResource(R.string.login_subtitle),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
@@ -137,23 +136,24 @@ fun LoginScreen(
             
             Spacer(modifier = Modifier.height(24.dp))
             
-            // Configuration Card
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(24.dp),
-                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
+            // Configuration Card Container
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp)
+                    .background(
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                        shape = RoundedCornerShape(24.dp)
+                    )
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                Column(
-                    modifier = Modifier.padding(20.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
                     // Common parameters
                     OutlinedTextField(
                         value = accountName,
                         onValueChange = { accountName = it },
-                        label = { Text("Nome Account Storage") },
-                        placeholder = { Text("es. ablobstorage") },
+                        label = { Text(stringResource(R.string.login_account_name)) },
+                        placeholder = { Text(stringResource(R.string.login_account_name_placeholder)) },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(12.dp)
@@ -162,8 +162,8 @@ fun LoginScreen(
                     OutlinedTextField(
                         value = containerName,
                         onValueChange = { containerName = it },
-                        label = { Text("Nome Container") },
-                        placeholder = { Text("es. documenti") },
+                        label = { Text(stringResource(R.string.login_container_name)) },
+                        placeholder = { Text(stringResource(R.string.login_container_name_placeholder)) },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(12.dp)
@@ -171,7 +171,7 @@ fun LoginScreen(
                     
                     // Auth Selector Tab
                     Text(
-                        text = "Modalità di Autenticazione",
+                        text = stringResource(R.string.login_auth_mode),
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.primary
@@ -189,9 +189,9 @@ fun LoginScreen(
                                 text = {
                                     Text(
                                         text = when (type) {
-                                            AuthType.SHARED_KEY -> "Chiave"
-                                            AuthType.SAS_TOKEN -> "SAS"
-                                            AuthType.ENTRA_ID -> "Entra ID"
+                                            AuthType.SHARED_KEY -> stringResource(R.string.login_tab_key)
+                                            AuthType.SAS_TOKEN -> stringResource(R.string.login_tab_sas)
+                                            AuthType.ENTRA_ID -> stringResource(R.string.login_tab_entra)
                                         },
                                         fontSize = 12.sp,
                                         fontWeight = FontWeight.Medium
@@ -209,14 +209,14 @@ fun LoginScreen(
                             OutlinedTextField(
                                 value = accountKey,
                                 onValueChange = { accountKey = it },
-                                label = { Text("Chiave Account (Storage Key)") },
+                                label = { Text(stringResource(R.string.login_account_key)) },
                                 singleLine = true,
                                 visualTransformation = if (isPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
                                 trailingIcon = {
                                     IconButton(onClick = { isPasswordVisible = !isPasswordVisible }) {
                                         Icon(
                                             imageVector = if (isPasswordVisible) Icons.Filled.Visibility else Icons.Filled.VisibilityOff,
-                                            contentDescription = "Visualizza chiave"
+                                            contentDescription = stringResource(R.string.login_view_key)
                                         )
                                     }
                                 },
@@ -228,8 +228,8 @@ fun LoginScreen(
                             OutlinedTextField(
                                 value = sasToken,
                                 onValueChange = { sasToken = it },
-                                label = { Text("Token SAS") },
-                                placeholder = { Text("?sv=2020-08-04&ss=b&srt=co&sp=rwdl...") },
+                                label = { Text(stringResource(R.string.login_sas_token)) },
+                                placeholder = { Text(stringResource(R.string.login_sas_placeholder)) },
                                 modifier = Modifier.fillMaxWidth(),
                                 shape = RoundedCornerShape(12.dp)
                             )
@@ -238,7 +238,7 @@ fun LoginScreen(
                             OutlinedTextField(
                                 value = tenantId,
                                 onValueChange = { tenantId = it },
-                                label = { Text("Tenant ID (Azure AD)") },
+                                label = { Text(stringResource(R.string.login_tenant_id)) },
                                 placeholder = { Text("00000000-0000-0000-0000-000000000000") },
                                 singleLine = true,
                                 modifier = Modifier.fillMaxWidth(),
@@ -247,7 +247,7 @@ fun LoginScreen(
                             OutlinedTextField(
                                 value = clientId,
                                 onValueChange = { clientId = it },
-                                label = { Text("Client ID (App Registration)") },
+                                label = { Text(stringResource(R.string.login_client_id)) },
                                 placeholder = { Text("00000000-0000-0000-0000-000000000000") },
                                 singleLine = true,
                                 modifier = Modifier.fillMaxWidth(),
@@ -256,14 +256,14 @@ fun LoginScreen(
                             OutlinedTextField(
                                 value = clientSecret,
                                 onValueChange = { clientSecret = it },
-                                label = { Text("Client Secret") },
+                                label = { Text(stringResource(R.string.login_client_secret)) },
                                 singleLine = true,
                                 visualTransformation = if (isSecretVisible) VisualTransformation.None else PasswordVisualTransformation(),
                                 trailingIcon = {
                                     IconButton(onClick = { isSecretVisible = !isSecretVisible }) {
                                         Icon(
                                             imageVector = if (isSecretVisible) Icons.Filled.Visibility else Icons.Filled.VisibilityOff,
-                                            contentDescription = "Visualizza segreto"
+                                            contentDescription = stringResource(R.string.login_view_secret)
                                         )
                                     }
                                 },
@@ -284,12 +284,12 @@ fun LoginScreen(
                         ) {
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = "Abilita Impronta Digitale",
+                                    text = stringResource(R.string.login_enable_biometric),
                                     style = MaterialTheme.typography.bodyMedium,
                                     fontWeight = FontWeight.SemiBold
                                 )
                                 Text(
-                                    text = "Accedi rapidamente all'avvio",
+                                    text = stringResource(R.string.login_enable_biometric_sub),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -301,7 +301,6 @@ fun LoginScreen(
                         }
                     }
                 }
-            }
             
             // Error Message display
             AnimatedVisibility(
@@ -345,7 +344,7 @@ fun LoginScreen(
                     )
                     
                     if (!config.isValid()) {
-                        errorMessage = "Per favore compila tutti i campi richiesti."
+                        errorMessage = context.getString(R.string.login_error_fields_required)
                         return@Button
                     }
                     
@@ -365,7 +364,8 @@ fun LoginScreen(
                             onLoginSuccess()
                         } catch (e: Exception) {
                             e.printStackTrace()
-                            errorMessage = "Connessione fallita: ${e.localizedMessage ?: "Errore sconosciuto"}"
+                            val details = e.localizedMessage ?: context.getString(R.string.login_error_unknown)
+                            errorMessage = context.getString(R.string.login_error_connection_failed, details)
                             isLoading = false
                         }
                     }
@@ -384,7 +384,7 @@ fun LoginScreen(
                     )
                 } else {
                     Text(
-                        text = "Connetti",
+                        text = stringResource(R.string.login_btn_connect),
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Bold
                     )

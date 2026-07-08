@@ -6,8 +6,12 @@ import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.ResponseBody
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.RequestBody.Companion.asRequestBody
+import okhttp3.RequestBody.Companion.toRequestBody
 import org.xmlpull.v1.XmlPullParser
 import org.xmlpull.v1.XmlPullParserFactory
+import java.io.File
 import java.io.IOException
 import java.io.StringReader
 import java.text.SimpleDateFormat
@@ -249,7 +253,7 @@ class AzureBlobClient {
         return urlBuilder
     }
 
-    suspend fun downloadBlob(blobPath: String): ResponseBody = withContext(Dispatchers.IO) {
+    suspend fun downloadBlob(blobPath: String): okhttp3.ResponseBody = withContext(Dispatchers.IO) {
         val currentConfig = config
         val url = "https://${currentConfig.accountName}.blob.core.windows.net/${currentConfig.containerName}/$blobPath"
         val request = Request.Builder()
@@ -263,6 +267,95 @@ class AzureBlobClient {
         } else {
             response.close()
             throw IOException("Failed to download blob: HTTP ${response.code}")
+        }
+    }
+
+    suspend fun uploadBlob(
+        blobPath: String,
+        file: File,
+        contentType: String,
+        onProgress: ((bytesSent: Long, totalBytes: Long) -> Unit)? = null
+    ): Unit = withContext(Dispatchers.IO) {
+        val currentConfig = config
+        val url = "https://${currentConfig.accountName}.blob.core.windows.net/${currentConfig.containerName}/$blobPath"
+        
+        val requestBody = ProgressRequestBody(file, contentType, onProgress)
+        
+        val request = Request.Builder()
+            .url(url)
+            .put(requestBody)
+            .header("Content-Length", file.length().toString())
+            .header("Content-Type", contentType)
+            .header("x-ms-blob-type", "BlockBlob")
+            .build()
+
+        authenticatedClient.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) {
+                val errBody = response.body?.string() ?: ""
+                throw IOException("Failed to upload blob: HTTP ${response.code}\n$errBody")
+            }
+        }
+    }
+
+    suspend fun copyBlob(sourcePath: String, destPath: String): Unit = withContext(Dispatchers.IO) {
+        val currentConfig = config
+        val url = "https://${currentConfig.accountName}.blob.core.windows.net/${currentConfig.containerName}/$destPath"
+        
+        val request = Request.Builder()
+            .url(url)
+            .put(ByteArray(0).toRequestBody(null))
+            .header("Content-Length", "0")
+            .header("x-ms-copy-source", "/${currentConfig.accountName}/${currentConfig.containerName}/$sourcePath")
+            .build()
+
+        authenticatedClient.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) {
+                val errBody = response.body?.string() ?: ""
+                throw IOException("Failed to copy blob: HTTP ${response.code}\n$errBody")
+            }
+        }
+    }
+
+    suspend fun renameBlob(sourcePath: String, destPath: String) {
+        copyBlob(sourcePath, destPath)
+        deleteBlob(sourcePath)
+    }
+
+    suspend fun createVirtualFolder(folderPath: String): Unit = withContext(Dispatchers.IO) {
+        val currentConfig = config
+        val normalizedPath = if (folderPath.endsWith("/")) folderPath else "$folderPath/"
+        val url = "https://${currentConfig.accountName}.blob.core.windows.net/${currentConfig.containerName}/$normalizedPath"
+        
+        val requestBody = ByteArray(0).toRequestBody(null)
+        
+        val request = Request.Builder()
+            .url(url)
+            .put(requestBody)
+            .header("Content-Length", "0")
+            .header("x-ms-blob-type", "BlockBlob")
+            .build()
+
+        authenticatedClient.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) {
+                val errBody = response.body?.string() ?: ""
+                throw IOException("Failed to create folder: HTTP ${response.code}\n$errBody")
+            }
+        }
+    }
+
+    suspend fun deleteBlob(blobPath: String): Unit = withContext(Dispatchers.IO) {
+        val currentConfig = config
+        val url = "https://${currentConfig.accountName}.blob.core.windows.net/${currentConfig.containerName}/$blobPath"
+        val request = Request.Builder()
+            .url(url)
+            .delete()
+            .build()
+
+        authenticatedClient.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) {
+                val errBody = response.body?.string() ?: ""
+                throw IOException("Failed to delete blob: HTTP ${response.code}\n$errBody")
+            }
         }
     }
 
@@ -373,3 +466,40 @@ data class ListBlobsResult(
     val items: List<BlobItem>,
     val nextMarker: String
 )
+
+class ProgressRequestBody(
+    private val file: File,
+    private val contentType: String,
+    private val onProgress: ((bytesSent: Long, totalBytes: Long) -> Unit)?
+) : okhttp3.RequestBody() {
+
+    override fun contentType(): okhttp3.MediaType? = 
+        contentType.toMediaTypeOrNull()
+
+    override fun contentLength(): Long = file.length()
+
+    override fun writeTo(sink: okio.BufferedSink) {
+        val fileLength = contentLength()
+        if (onProgress == null) {
+            val buffer = ByteArray(8192)
+            file.inputStream().use { input ->
+                var read: Int
+                while (input.read(buffer).also { read = it } != -1) {
+                    sink.write(buffer, 0, read)
+                }
+            }
+            return
+        }
+        
+        val buffer = ByteArray(8192)
+        var uploaded = 0L
+        file.inputStream().use { input ->
+            var read: Int
+            while (input.read(buffer).also { read = it } != -1) {
+                sink.write(buffer, 0, read)
+                uploaded += read
+                onProgress.invoke(uploaded, fileLength)
+            }
+        }
+    }
+}

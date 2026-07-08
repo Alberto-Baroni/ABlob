@@ -7,3 +7,5 @@ import kotlinx.serialization.Serializable
 @Serializable data object Login : NavKey
 @Serializable data class Browser(val prefix: String = "") : NavKey
 @Serializable data object Settings : NavKey
+@Serializable data class Viewer(val path: String, val name: String, val contentType: String) : NavKey
+
