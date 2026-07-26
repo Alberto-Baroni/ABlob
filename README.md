@@ -6,7 +6,7 @@
 [![AGP Version](https://img.shields.io/badge/AGP-9.2.0-orange.svg?style=flat-circle)](https://developer.android.com/studio/releases/gradle-plugin)
 
 > [!NOTE]
-> **100% AI Generated**: Questo progetto e l'intero codice sorgente dell'applicazione sono stati interamente progettati, implementati, rifiniti e documentati da un assistente di intelligenza artificiale (AI coding assistant).
+> **100% AI Generated**: Questo progetto e l'intero codice sorgente dell'applicazione sono stati interamente progettati, implementati, rifiniti e documentati da un assistente di intelligenza artificiale (AI coding assistant) seguendo rigide specifiche umane.
 
 **ABlob** is a lightweight, elegant, and highly secure Android application designed to browse, search, view, and download files stored in Azure Blob Storage. It is built entirely in **Kotlin** using **Jetpack Compose** and follows modern Android development best practices.
 
