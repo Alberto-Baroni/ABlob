@@ -193,10 +193,7 @@ fun SplashScreen(
         val promptInfo = BiometricPrompt.PromptInfo.Builder()
             .setTitle(activity.getString(R.string.biometric_prompt_title))
             .setSubtitle(activity.getString(R.string.biometric_prompt_subtitle))
-            .setAllowedAuthenticators(
-                androidx.biometric.BiometricManager.Authenticators.BIOMETRIC_STRONG or
-                    androidx.biometric.BiometricManager.Authenticators.DEVICE_CREDENTIAL
-            )
+            .setAllowedAuthenticators(securityManager.getAllowedAuthenticators())
             .build()
 
         val biometricPrompt = BiometricPrompt(activity, executor, callback)
