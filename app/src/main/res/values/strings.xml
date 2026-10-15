@@ -6,9 +6,7 @@
     <string name="biometric_error_not_recognized">Fingerprint not recognized. Try again.</string>
     <string name="biometric_prompt_title">ABlob Access</string>
     <string name="biometric_prompt_subtitle">Use biometrics to log in</string>
-    <string name="biometric_prompt_negative">Use credentials</string>
     <string name="biometric_btn_unlock">Unlock with Fingerprint</string>
-    <string name="biometric_btn_fallback">Use alternative credentials</string>
 
     <!-- Login Screen -->
     <string name="login_title">ABlob Storage</string>

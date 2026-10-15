@@ -2,6 +2,7 @@ package com.example.ablob.data
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.os.Build
 import androidx.biometric.BiometricManager
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKeys
@@ -74,8 +75,16 @@ class SecurityManager(private val context: Context) {
 
     fun isBiometricHardwareAvailable(): Boolean {
         val biometricManager = BiometricManager.from(context)
-        val authenticators = BiometricManager.Authenticators.BIOMETRIC_STRONG or BiometricManager.Authenticators.DEVICE_CREDENTIAL
-        return biometricManager.canAuthenticate(authenticators) == BiometricManager.BIOMETRIC_SUCCESS
+        return biometricManager.canAuthenticate(getAllowedAuthenticators()) == BiometricManager.BIOMETRIC_SUCCESS
+    }
+
+    fun getAllowedAuthenticators(): Int {
+        val biometricStrong = BiometricManager.Authenticators.BIOMETRIC_STRONG
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            biometricStrong or BiometricManager.Authenticators.DEVICE_CREDENTIAL
+        } else {
+            biometricStrong
+        }
     }
 
     fun isBiometricEnabled(): Boolean {
