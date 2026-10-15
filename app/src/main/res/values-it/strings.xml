@@ -6,9 +6,7 @@
     <string name="biometric_error_not_recognized">Impronta non riconosciuta. Riprova.</string>
     <string name="biometric_prompt_title">Accesso a ABlob</string>
     <string name="biometric_prompt_subtitle">Usa i dati biometrici per accedere</string>
-    <string name="biometric_prompt_negative">Usa credenziali</string>
     <string name="biometric_btn_unlock">Sblocca con Impronta</string>
-    <string name="biometric_btn_fallback">Usa credenziali alternative</string>
 
     <!-- Login Screen -->
     <string name="login_title">ABlob Storage</string>

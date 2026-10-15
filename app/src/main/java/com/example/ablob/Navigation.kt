@@ -75,11 +75,6 @@ fun MainNavigation(
                         backStack.add(Browser(""))
                         // Remove Splash from history so back button exits the app
                         backStack.remove(Splash)
-                    },
-                    onAuthFallback = {
-                        // Fallback to login screen
-                        backStack.add(Login)
-                        backStack.remove(Splash)
                     }
                 )
             }
@@ -166,8 +161,7 @@ fun MainNavigation(
 fun SplashScreen(
     activity: FragmentActivity,
     securityManager: SecurityManager,
-    onAuthSuccess: () -> Unit,
-    onAuthFallback: () -> Unit
+    onAuthSuccess: () -> Unit
 ) {
     var authError by remember { mutableStateOf<String?>(null) }
     var showRetryButton by remember { mutableStateOf(false) }
@@ -182,13 +176,6 @@ fun SplashScreen(
                 super.onAuthenticationError(errorCode, errString)
                 authError = errString.toString()
                 showRetryButton = true
-                
-                // If user cancels or clicks use password/pin, we can fallback to Login screen
-                if (errorCode == BiometricPrompt.ERROR_USER_CANCELED || 
-                    errorCode == BiometricPrompt.ERROR_NEGATIVE_BUTTON ||
-                    errorCode == BiometricPrompt.ERROR_CANCELED) {
-                    onAuthFallback()
-                }
             }
 
             override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
@@ -206,7 +193,10 @@ fun SplashScreen(
         val promptInfo = BiometricPrompt.PromptInfo.Builder()
             .setTitle(activity.getString(R.string.biometric_prompt_title))
             .setSubtitle(activity.getString(R.string.biometric_prompt_subtitle))
-            .setNegativeButtonText(activity.getString(R.string.biometric_prompt_negative))
+            .setAllowedAuthenticators(
+                androidx.biometric.BiometricManager.Authenticators.BIOMETRIC_STRONG or
+                    androidx.biometric.BiometricManager.Authenticators.DEVICE_CREDENTIAL
+            )
             .build()
 
         val biometricPrompt = BiometricPrompt(activity, executor, callback)
@@ -313,12 +303,6 @@ fun SplashScreen(
                     Icon(imageVector = Icons.Default.Fingerprint, contentDescription = null)
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(stringResource(R.string.biometric_btn_unlock), fontWeight = FontWeight.Bold)
-                }
-                
-                Spacer(modifier = Modifier.height(12.dp))
-                
-                TextButton(onClick = onAuthFallback) {
-                    Text(stringResource(R.string.biometric_btn_fallback))
                 }
             } else {
                 CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
