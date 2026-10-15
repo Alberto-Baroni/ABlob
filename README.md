@@ -4,6 +4,7 @@
 [![Kotlin Version](https://img.shields.io/badge/kotlin-2.0.0-blue.svg?style=flat-circle&logo=kotlin)](https://kotlinlang.org)
 [![Gradle Version](https://img.shields.io/badge/gradle-9.6.1-green.svg?style=flat-circle&logo=gradle)](https://gradle.org)
 [![AGP Version](https://img.shields.io/badge/AGP-9.2.0-orange.svg?style=flat-circle)](https://developer.android.com/studio/releases/gradle-plugin)
+[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 
 > [!NOTE]
 > **100% AI Generated**: This project and the entire application source code have been entirely designed, implemented, refined, and documented by the Gemini AI coding assistant, following strict human specifications.
@@ -102,3 +103,7 @@ To run unit tests:
 ```bash
 ./gradlew test
 ```
+
+## License
+
+ABlob is licensed under the [Apache License 2.0](LICENSE).
