@@ -493,7 +493,7 @@ fun SettingsScreen(
 
             Spacer(modifier = Modifier.height(20.dp))
             Text(
-                text = "ABlob v1.0.0",
+                text = "ABlob v1.0.1",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.outline,
                 modifier = Modifier.align(Alignment.CenterHorizontally)
