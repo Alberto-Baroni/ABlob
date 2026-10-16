@@ -3,9 +3,17 @@ package com.example.ablob.data
 import android.content.Context
 import android.content.SharedPreferences
 import android.os.Build
+import android.security.keystore.KeyGenParameterSpec
+import android.security.keystore.KeyPermanentlyInvalidatedException
+import android.security.keystore.KeyProperties
 import androidx.biometric.BiometricManager
+import androidx.biometric.BiometricPrompt
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKeys
+import java.security.KeyStore
+import javax.crypto.Cipher
+import javax.crypto.KeyGenerator
+import javax.crypto.SecretKey
 
 class SecurityManager(private val context: Context) {
 
@@ -89,6 +97,72 @@ class SecurityManager(private val context: Context) {
 
     fun isBiometricEnabled(): Boolean {
         return loadConfig().useBiometrics && isBiometricHardwareAvailable()
+    }
+
+    fun createBiometricCryptoObject(): BiometricPrompt.CryptoObject? {
+        return try {
+            val keyStore = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
+            val secretKey = if (keyStore.containsAlias(BIOMETRIC_KEY_ALIAS)) {
+                val entry = keyStore.getEntry(BIOMETRIC_KEY_ALIAS, null) as? KeyStore.SecretKeyEntry
+                entry?.secretKey ?: generateBiometricKey()
+            } else {
+                generateBiometricKey()
+            }
+
+            val cipher = Cipher.getInstance(
+                "${KeyProperties.KEY_ALGORITHM_AES}/${KeyProperties.BLOCK_MODE_CBC}/${KeyProperties.ENCRYPTION_PADDING_PKCS7}"
+            )
+            cipher.init(Cipher.ENCRYPT_MODE, secretKey)
+            BiometricPrompt.CryptoObject(cipher)
+        } catch (e: KeyPermanentlyInvalidatedException) {
+            deleteBiometricKey()
+            try {
+                val secretKey = generateBiometricKey()
+                val cipher = Cipher.getInstance(
+                    "${KeyProperties.KEY_ALGORITHM_AES}/${KeyProperties.BLOCK_MODE_CBC}/${KeyProperties.ENCRYPTION_PADDING_PKCS7}"
+                )
+                cipher.init(Cipher.ENCRYPT_MODE, secretKey)
+                BiometricPrompt.CryptoObject(cipher)
+            } catch (_: Exception) {
+                null
+            }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun generateBiometricKey(): SecretKey {
+        val keyGenerator = KeyGenerator.getInstance(
+            KeyProperties.KEY_ALGORITHM_AES,
+            "AndroidKeyStore"
+        )
+        val builder = KeyGenParameterSpec.Builder(
+            BIOMETRIC_KEY_ALIAS,
+            KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT
+        )
+            .setBlockModes(KeyProperties.BLOCK_MODE_CBC)
+            .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_PKCS7)
+            .setUserAuthenticationRequired(true)
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            builder.setUserAuthenticationParameters(0, KeyProperties.AUTH_BIOMETRIC_STRONG)
+        }
+
+        keyGenerator.init(builder.build())
+        return keyGenerator.generateKey()
+    }
+
+    private fun deleteBiometricKey() {
+        try {
+            val keyStore = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
+            if (keyStore.containsAlias(BIOMETRIC_KEY_ALIAS)) {
+                keyStore.deleteEntry(BIOMETRIC_KEY_ALIAS)
+            }
+        } catch (_: Exception) {}
+    }
+
+    companion object {
+        private const val BIOMETRIC_KEY_ALIAS = "ablob_biometric_key"
     }
 
     enum class AppTheme { SYSTEM, LIGHT, DARK }

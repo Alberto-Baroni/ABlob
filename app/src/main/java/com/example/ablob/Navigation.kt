@@ -169,7 +169,9 @@ fun SplashScreen(
     fun triggerBiometric() {
         authError = null
         showRetryButton = false
-        
+
+        val cryptoObject = securityManager.createBiometricCryptoObject()
+
         val executor = ContextCompat.getMainExecutor(activity)
         val callback = object : BiometricPrompt.AuthenticationCallback() {
             override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
@@ -180,7 +182,19 @@ fun SplashScreen(
 
             override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
                 super.onAuthenticationSucceeded(result)
-                onAuthSuccess()
+                val authenticatedCipher = result.cryptoObject?.cipher
+                if (authenticatedCipher != null) {
+                    try {
+                        val payload = "ablob_auth_token".toByteArray(Charsets.UTF_8)
+                        authenticatedCipher.doFinal(payload)
+                        onAuthSuccess()
+                    } catch (_: Exception) {
+                        authError = activity.getString(R.string.biometric_error_not_recognized)
+                        showRetryButton = true
+                    }
+                } else {
+                    onAuthSuccess()
+                }
             }
 
             override fun onAuthenticationFailed() {
@@ -190,14 +204,19 @@ fun SplashScreen(
             }
         }
 
-        val promptInfo = BiometricPrompt.PromptInfo.Builder()
+        val promptInfoBuilder = BiometricPrompt.PromptInfo.Builder()
             .setTitle(activity.getString(R.string.biometric_prompt_title))
             .setSubtitle(activity.getString(R.string.biometric_prompt_subtitle))
-            .setAllowedAuthenticators(securityManager.getAllowedAuthenticators())
-            .build()
 
-        val biometricPrompt = BiometricPrompt(activity, executor, callback)
-        biometricPrompt.authenticate(promptInfo)
+        if (cryptoObject != null) {
+            promptInfoBuilder.setNegativeButtonText(activity.getString(android.R.string.cancel))
+            val biometricPrompt = BiometricPrompt(activity, executor, callback)
+            biometricPrompt.authenticate(promptInfoBuilder.build(), cryptoObject)
+        } else {
+            promptInfoBuilder.setAllowedAuthenticators(securityManager.getAllowedAuthenticators())
+            val biometricPrompt = BiometricPrompt(activity, executor, callback)
+            biometricPrompt.authenticate(promptInfoBuilder.build())
+        }
     }
 
     LaunchedEffect(Unit) {
