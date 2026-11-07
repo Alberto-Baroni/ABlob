@@ -11,6 +11,8 @@
 
 **ABlob** is a lightweight, elegant, and highly secure Android application designed to browse, search, view, and download files stored in Azure Blob Storage. It is built entirely in **Kotlin** using **Jetpack Compose** and follows modern Android development best practices.
 
+![ABlob screenshot](https://github.com/Alberto-Baroni/ABlob/blob/main/store-assets/screenshots/anteprima.jpg)
+
 To maintain a minimal application size and ensure compatibility with the Android runtime, ABlob uses a custom-tailored lightweight OkHttp connection wrapper. This bypasses the heavy Project Reactor and Netty dependencies of the official server-side Azure Java SDK.
 
 ---
