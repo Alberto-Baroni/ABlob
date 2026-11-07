@@ -25,8 +25,8 @@ android {
         applicationId = "com.alkaloon.ablob"
         minSdk = 24
         targetSdk = 36
-        versionCode = 2
-        versionName = "1.0.1"
+        versionCode = 4
+        versionName = "1.1.0"
     }
 
     signingConfigs {
@@ -108,6 +108,7 @@ dependencies {
 
   // Local tests: jUnit, coroutines, Android runner
   testImplementation(libs.junit)
+  testImplementation("org.json:json:20240303")
   testImplementation(libs.kotlinx.coroutines.test)
 
   // Instrumented tests: jUnit rules and runners
@@ -125,6 +126,7 @@ dependencies {
   implementation(libs.androidx.security.crypto)
   implementation(libs.androidx.biometric)
   implementation(libs.okhttp)
+  implementation("com.microsoft.identity.client:msal:8.6.0")
   implementation(libs.coil.compose)
   implementation("androidx.compose.material:material-icons-core")
   implementation("androidx.compose.material:material-icons-extended")

@@ -18,7 +18,7 @@ data class StorageConfig(
     val sasToken: String = "",
     val tenantId: String = "",
     val clientId: String = "",
-    val clientSecret: String = "",
+    val entraAccountId: String = "",
     val useBiometrics: Boolean = false
 ) {
     fun isValid(): Boolean {
@@ -26,7 +26,7 @@ data class StorageConfig(
         return when (authType) {
             AuthType.SHARED_KEY -> accountKey.isNotBlank()
             AuthType.SAS_TOKEN -> sasToken.isNotBlank()
-            AuthType.ENTRA_ID -> tenantId.isNotBlank() && clientId.isNotBlank() && clientSecret.isNotBlank()
+            AuthType.ENTRA_ID -> tenantId.isNotBlank() && clientId.isNotBlank()
         }
     }
 }

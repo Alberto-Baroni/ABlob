@@ -1,7 +1,6 @@
 package com.example.ablob.data
 
 import android.util.Base64
-import okhttp3.FormBody
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -23,35 +22,36 @@ import javax.crypto.spec.SecretKeySpec
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-class AzureBlobClient {
+class AzureBlobClient(private val entraTokens: EntraAuthentication = UnavailableEntraAuthentication) {
 
     @Volatile
     private var config: StorageConfig = StorageConfig()
 
-    @Volatile
-    private var cachedToken: String? = null
-
-    @Volatile
-    private var tokenExpiryTime: Long = 0
-
     fun updateConfig(newConfig: StorageConfig) {
         config = newConfig
-        cachedToken = null
-        tokenExpiryTime = 0
+    }
+
+    suspend fun signInEntra(activity: android.app.Activity, newConfig: StorageConfig): StorageConfig =
+        entraTokens.signIn(activity, newConfig)
+
+    suspend fun signOutEntra() {
+        if (config.authType == AuthType.ENTRA_ID) entraTokens.signOut(config)
     }
 
     fun getCurrentConfig(): StorageConfig = config
+
+    fun entraRedirectUri(): String? = entraTokens.redirectUri()
 
     val authenticatedClient: OkHttpClient by lazy {
         OkHttpClient.Builder()
             .addInterceptor { chain ->
                 val request = chain.request()
-                // Only intercept and sign requests targeting Azure Blob Storage
-                if (!request.url.host.contains("blob.core.windows.net")) {
+                val currentConfig = config
+                // Only attach credentials to the configured HTTPS storage endpoint.
+                if (request.url.scheme != "https" || request.url.host != "${currentConfig.accountName}.blob.core.windows.net") {
                     return@addInterceptor chain.proceed(request)
                 }
 
-                val currentConfig = config
                 val urlBuilder = request.url.newBuilder()
                 val dateString = getRFC1123Date()
                 val requestBuilder = request.newBuilder()
@@ -65,17 +65,16 @@ class AzureBlobClient {
                             sas.split('&').forEach { param ->
                                 val parts = param.split('=', limit = 2)
                                 if (parts.size == 2) {
-                                    urlBuilder.addQueryParameter(parts[0], parts[1])
+                                    // SAS values are already URL encoded; encoding again corrupts the signature.
+                                    urlBuilder.addEncodedQueryParameter(parts[0], parts[1])
                                 }
                             }
                         }
                         requestBuilder.url(urlBuilder.build())
                     }
                     AuthType.ENTRA_ID -> {
-                        val token = getEntraToken(currentConfig)
-                        if (!token.isNullOrEmpty()) {
-                            requestBuilder.header("Authorization", "Bearer $token")
-                        }
+                        val token = entraTokens.getToken(currentConfig)
+                        requestBuilder.header("Authorization", "Bearer $token")
                     }
                     AuthType.SHARED_KEY -> {
                         val tempRequest = requestBuilder.build()
@@ -94,57 +93,6 @@ class AzureBlobClient {
         val dateFormat = SimpleDateFormat("EEE, dd MMM yyyy HH:mm:ss z", Locale.US)
         dateFormat.timeZone = TimeZone.getTimeZone("GMT")
         return dateFormat.format(calendar.time)
-    }
-
-    private fun getEntraToken(currentConfig: StorageConfig): String? {
-        val currentTime = System.currentTimeMillis()
-        if (cachedToken != null && currentTime < tokenExpiryTime) {
-            return cachedToken
-        }
-
-        synchronized(this) {
-            // Check again inside block
-            if (cachedToken != null && currentTime < tokenExpiryTime) {
-                return cachedToken
-            }
-
-            val formBody = FormBody.Builder()
-                .add("grant_type", "client_credentials")
-                .add("client_id", currentConfig.clientId)
-                .add("client_secret", currentConfig.clientSecret)
-                .add("scope", "https://storage.azure.com/.default")
-                .build()
-
-            val request = Request.Builder()
-                .url("https://login.microsoftonline.com/${currentConfig.tenantId}/oauth2/v2.0/token")
-                .post(formBody)
-                .build()
-
-            try {
-                // Use clean OkHttpClient without signing interceptor for fetching OAuth tokens
-                val client = OkHttpClient()
-                client.newCall(request).execute().use { response ->
-                    if (!response.isSuccessful) return null
-                    val body = response.body?.string() ?: return null
-
-                    val tokenRegex = """"access_token"\s*:\s*"([^"]+)"""".toRegex()
-                    val expiryRegex = """"expires_in"\s*:\s*(\d+)""".toRegex()
-
-                    val tokenMatch = tokenRegex.find(body)
-                    val expiryMatch = expiryRegex.find(body)
-
-                    if (tokenMatch != null) {
-                        cachedToken = tokenMatch.groupValues[1]
-                        val expiresInSeconds = expiryMatch?.groupValues[1]?.toLongOrNull() ?: 3600
-                        tokenExpiryTime = currentTime + (expiresInSeconds - 60) * 1000 // Refresh 1 min early
-                        return cachedToken
-                    }
-                }
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
-            return null
-        }
     }
 
     private fun calculateSharedKeySignature(request: Request, accountName: String, accountKey: String): String {

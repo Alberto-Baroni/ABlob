@@ -7,6 +7,7 @@
 /.idea/workspace.xml
 /.idea/navEditor.xml
 /.idea/assetWizardSettings.xml
+/.idea/deviceManager.xml
 .DS_Store
 /build
 /captures
@@ -19,3 +20,51 @@ prompt.txt
 *.jks
 *.keystore
 keystore.properties
+/.secrets
+
+# Local secrets (also in subdirectories)
+.secrets/
+.credentials/
+.env
+.env.*
+!.env.example
+!.env.sample
+!.env.template
+*.secret
+*.secrets
+secrets.properties
+secrets.json
+credentials.json
+credentials.*.json
+*-credentials.json
+service-account*.json
+
+# Private keys and certificate bundles
+*.p12
+*.pfx
+*.key
+*.pem
+
+# Local Azure / cloud credentials and deployment state
+/.azure/
+/.aws/
+*.tfstate
+*.tfstate.*
+
+# Tester/reviewer access details and exported tokens
+ACCESSO-ABLOB-*.txt
+sas.txt
+*-sas.txt
+sas-token*.txt
+sas-token*.json
+access-token*.txt
+access-token*.json
+refresh-token*.txt
+refresh-token*.json
+*connection-string*.txt
+*connection-string*.json
+
+# Local compiler sessions and memory dumps may contain sensitive runtime data
+/.kotlin/
+*.hprof
+hs_err_pid*.log

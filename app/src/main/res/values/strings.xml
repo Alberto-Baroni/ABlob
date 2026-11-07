@@ -25,8 +25,9 @@
     <string name="login_sas_placeholder">\?sv=2020-08-04&amp;ss=b&amp;srt=co&amp;sp=rwdl...</string>
     <string name="login_tenant_id">Tenant ID (Azure AD)</string>
     <string name="login_client_id">Client ID (App Registration)</string>
-    <string name="login_client_secret">Client Secret</string>
-    <string name="login_view_secret">View secret</string>
+    <string name="login_entra_help">Sign in with your Microsoft work or school account. Use your own tenant and public-client app registration. Your user must have access to the selected Blob container.</string>
+    <string name="login_btn_microsoft">Sign in with Microsoft</string>
+    <string name="login_entra_redirect_help">Register this redirect URI in your Entra app registration (select and copy):</string>
     <string name="login_enable_biometric">Enable Fingerprint</string>
     <string name="login_enable_biometric_sub">Access quickly on startup</string>
     <string name="login_error_fields_required">Please fill in all required fields.</string>

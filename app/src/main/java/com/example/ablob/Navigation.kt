@@ -82,6 +82,7 @@ fun MainNavigation(
             // Login Screen Route
             entry<Login> {
                 LoginScreen(
+                    activity = activity,
                     securityManager = securityManager,
                     azureBlobClient = azureBlobClient,
                     onLoginSuccess = {

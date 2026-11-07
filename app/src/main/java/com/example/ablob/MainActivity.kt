@@ -16,6 +16,7 @@ import coil.memory.MemoryCache
 import coil.disk.DiskCache
 import com.example.ablob.data.AzureBlobClient
 import com.example.ablob.data.SecurityManager
+import com.example.ablob.data.MsalEntraAuthentication
 import com.example.ablob.theme.ABlobTheme
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
@@ -45,7 +46,7 @@ class MainActivity : FragmentActivity() {
         super.onCreate(savedInstanceState)
 
         securityManager = SecurityManager(applicationContext)
-        azureBlobClient = AzureBlobClient()
+        azureBlobClient = AzureBlobClient(MsalEntraAuthentication(applicationContext))
 
         // Configure Coil to use our authenticated client for Azure image requests
         // Configure Coil with cache optimization to prevent excessive memory/disk usage

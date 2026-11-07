@@ -26,6 +26,7 @@ import com.example.ablob.data.AzureBlobClient
 import com.example.ablob.data.SecurityManager
 import androidx.compose.ui.res.stringResource
 import com.example.ablob.R
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -43,8 +44,12 @@ fun SettingsScreen(
     var useBiometrics by remember { mutableStateOf(config.useBiometrics) }
     val isBiometricAvailable = remember { securityManager.isBiometricHardwareAvailable() }
     var showLegalDialog by remember { mutableStateOf(false) }
+    val coroutineScope = rememberCoroutineScope()
+    val snackbarHost = remember { SnackbarHostState() }
+    var signingOut by remember { mutableStateOf(false) }
 
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHost) },
         topBar = {
             TopAppBar(
                 title = { Text(stringResource(R.string.settings_title), fontWeight = FontWeight.Bold) },
@@ -455,10 +460,22 @@ fun SettingsScreen(
                     // Disconnect
                     Surface(
                         onClick = {
-                            securityManager.clearConfig()
-                            azureBlobClient.updateConfig(com.example.ablob.data.StorageConfig())
-                            onLogout()
+                            coroutineScope.launch {
+                                signingOut = true
+                                try {
+                                    azureBlobClient.signOutEntra()
+                                    securityManager.clearConfig()
+                                    azureBlobClient.updateConfig(com.example.ablob.data.StorageConfig())
+                                    onLogout()
+                                } catch (e: Exception) {
+                                    if (e is kotlinx.coroutines.CancellationException) throw e
+                                    snackbarHost.showSnackbar(e.localizedMessage ?: "Microsoft sign-out failed.")
+                                } finally {
+                                    signingOut = false
+                                }
+                            }
                         },
+                        enabled = !signingOut,
                         color = Color.Transparent,
                         modifier = Modifier.fillMaxWidth()
                     ) {

@@ -41,7 +41,8 @@ class SecurityManager(private val context: Context) {
             putString("sas_token", config.sasToken)
             putString("tenant_id", config.tenantId)
             putString("client_id", config.clientId)
-            putString("client_secret", config.clientSecret)
+            remove("client_secret")
+            putString("entra_account_id", config.entraAccountId)
             putBoolean("use_biometrics", config.useBiometrics)
             apply()
         }
@@ -56,7 +57,9 @@ class SecurityManager(private val context: Context) {
         val sasToken = sharedPrefs.getString("sas_token", "") ?: ""
         val tenantId = sharedPrefs.getString("tenant_id", "") ?: ""
         val clientId = sharedPrefs.getString("client_id", "") ?: ""
-        val clientSecret = sharedPrefs.getString("client_secret", "") ?: ""
+        // Remove credentials left by the former client-credentials flow on upgrade.
+        if (sharedPrefs.contains("client_secret")) sharedPrefs.edit().remove("client_secret").apply()
+        val entraAccountId = sharedPrefs.getString("entra_account_id", "") ?: ""
         val useBiometrics = sharedPrefs.getBoolean("use_biometrics", false)
 
         return StorageConfig(
@@ -67,7 +70,7 @@ class SecurityManager(private val context: Context) {
             sasToken = sasToken,
             tenantId = tenantId,
             clientId = clientId,
-            clientSecret = clientSecret,
+            entraAccountId = entraAccountId,
             useBiometrics = useBiometrics
         )
     }
@@ -78,7 +81,7 @@ class SecurityManager(private val context: Context) {
 
     fun hasConfig(): Boolean {
         val config = loadConfig()
-        return config.isValid()
+        return config.isValid() && (config.authType != AuthType.ENTRA_ID || config.entraAccountId.isNotBlank())
     }
 
     fun isBiometricHardwareAvailable(): Boolean {

@@ -17,12 +17,12 @@ To maintain a minimal application size and ensure compatibility with the Android
 
 ## Key Features
 
-- 🔐 **Secure Credential Storage**: Sensitive configuration details (account keys, client secrets, SAS tokens) are encrypted with **AES-256 GCM** and saved in `EncryptedSharedPreferences` backed by the Android Keystore.
+- 🔐 **Secure Credential Storage**: Account keys and SAS tokens are encrypted with **AES-256 GCM** and saved in `EncryptedSharedPreferences` backed by the Android Keystore. Entra tokens are managed by MSAL; client secrets are not used.
 - ☝️ **Biometric Authentication**: Access the application passwordlessly using standard Android fingerprint and face recognition.
 - 🌐 **Flexible Connections**: Connect to containers via:
   - **Shared Key**: Computes standard Azure canonical header signatures signed with HMAC-SHA256.
   - **SAS Token**: Connects directly via Shared Access Signature query parameters.
-  - **Microsoft Entra ID (Azure AD)**: Connects programmatically using the OAuth2 Client Credentials flow (Tenant ID, Client ID, Client Secret) with automatic token refresh caching.
+  - **Microsoft Entra ID**: Interactive Microsoft sign-in in the system browser using MSAL and Authorization Code with PKCE. Each user supplies their own tenant, public-client application ID and storage connection. No client secret is requested or stored; MSAL manages the token cache and silent renewal. See [Entra setup](ENTRA_SETUP.md).
 - 📁 **Virtual Folder Navigation & Creation**: Seamlessly browse nested virtual directories in the storage container, with interactive breadcrumbs navigation. Create new virtual folders directly from the app (using 0-byte placeholder block blobs).
 - ⭐ **Bookmarks & Favorites**: Star folders, files, or images and view them inside a dedicated **Preferiti** tab for instant access.
 - 🔍 **Search Terms Highlighting**: Matching characters from search queries are automatically highlighted yellow in list rows and gallery cards.

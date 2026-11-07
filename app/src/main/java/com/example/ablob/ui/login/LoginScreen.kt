@@ -35,6 +35,7 @@ import androidx.compose.ui.platform.LocalContext
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LoginScreen(
+    activity: android.app.Activity,
     securityManager: SecurityManager,
     azureBlobClient: AzureBlobClient,
     onLoginSuccess: () -> Unit,
@@ -51,17 +52,16 @@ fun LoginScreen(
     var sasToken by remember { mutableStateOf("") }
     var tenantId by remember { mutableStateOf("") }
     var clientId by remember { mutableStateOf("") }
-    var clientSecret by remember { mutableStateOf("") }
     
     var useBiometrics by remember { mutableStateOf(false) }
     
     var isPasswordVisible by remember { mutableStateOf(false) }
-    var isSecretVisible by remember { mutableStateOf(false) }
     
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     
     val isBiometricAvailable = remember { securityManager.isBiometricHardwareAvailable() }
+    val entraRedirect = remember { runCatching { azureBlobClient.entraRedirectUri() }.getOrNull() }
 
     // Pre-populate with existing configurations if any (e.g. for modification)
     LaunchedEffect(Unit) {
@@ -74,7 +74,6 @@ fun LoginScreen(
             sasToken = existing.sasToken
             tenantId = existing.tenantId
             clientId = existing.clientId
-            clientSecret = existing.clientSecret
             useBiometrics = existing.useBiometrics
         }
     }
@@ -152,6 +151,7 @@ fun LoginScreen(
                     OutlinedTextField(
                         value = accountName,
                         onValueChange = { accountName = it },
+                        enabled = !isLoading,
                         label = { Text(stringResource(R.string.login_account_name)) },
                         placeholder = { Text(stringResource(R.string.login_account_name_placeholder)) },
                         singleLine = true,
@@ -162,6 +162,7 @@ fun LoginScreen(
                     OutlinedTextField(
                         value = containerName,
                         onValueChange = { containerName = it },
+                        enabled = !isLoading,
                         label = { Text(stringResource(R.string.login_container_name)) },
                         placeholder = { Text(stringResource(R.string.login_container_name_placeholder)) },
                         singleLine = true,
@@ -185,6 +186,7 @@ fun LoginScreen(
                         AuthType.values().forEach { type ->
                             Tab(
                                 selected = authType == type,
+                                enabled = !isLoading,
                                 onClick = { authType = type },
                                 text = {
                                     Text(
@@ -209,6 +211,7 @@ fun LoginScreen(
                             OutlinedTextField(
                                 value = accountKey,
                                 onValueChange = { accountKey = it },
+                                enabled = !isLoading,
                                 label = { Text(stringResource(R.string.login_account_key)) },
                                 singleLine = true,
                                 visualTransformation = if (isPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
@@ -228,6 +231,7 @@ fun LoginScreen(
                             OutlinedTextField(
                                 value = sasToken,
                                 onValueChange = { sasToken = it },
+                                enabled = !isLoading,
                                 label = { Text(stringResource(R.string.login_sas_token)) },
                                 placeholder = { Text(stringResource(R.string.login_sas_placeholder)) },
                                 modifier = Modifier.fillMaxWidth(),
@@ -238,6 +242,7 @@ fun LoginScreen(
                             OutlinedTextField(
                                 value = tenantId,
                                 onValueChange = { tenantId = it },
+                                enabled = !isLoading,
                                 label = { Text(stringResource(R.string.login_tenant_id)) },
                                 placeholder = { Text("00000000-0000-0000-0000-000000000000") },
                                 singleLine = true,
@@ -247,29 +252,23 @@ fun LoginScreen(
                             OutlinedTextField(
                                 value = clientId,
                                 onValueChange = { clientId = it },
+                                enabled = !isLoading,
                                 label = { Text(stringResource(R.string.login_client_id)) },
                                 placeholder = { Text("00000000-0000-0000-0000-000000000000") },
                                 singleLine = true,
                                 modifier = Modifier.fillMaxWidth(),
                                 shape = RoundedCornerShape(12.dp)
                             )
-                            OutlinedTextField(
-                                value = clientSecret,
-                                onValueChange = { clientSecret = it },
-                                label = { Text(stringResource(R.string.login_client_secret)) },
-                                singleLine = true,
-                                visualTransformation = if (isSecretVisible) VisualTransformation.None else PasswordVisualTransformation(),
-                                trailingIcon = {
-                                    IconButton(onClick = { isSecretVisible = !isSecretVisible }) {
-                                        Icon(
-                                            imageVector = if (isSecretVisible) Icons.Filled.Visibility else Icons.Filled.VisibilityOff,
-                                            contentDescription = stringResource(R.string.login_view_secret)
-                                        )
-                                    }
-                                },
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(12.dp)
+                            Text(
+                                text = stringResource(R.string.login_entra_help),
+                                style = MaterialTheme.typography.bodySmall
                             )
+                            if (entraRedirect != null) {
+                                Text(stringResource(R.string.login_entra_redirect_help), style = MaterialTheme.typography.bodySmall)
+                                androidx.compose.foundation.text.selection.SelectionContainer {
+                                    Text(entraRedirect, style = MaterialTheme.typography.bodySmall)
+                                }
+                            }
                         }
                     }
                     
@@ -296,6 +295,7 @@ fun LoginScreen(
                             }
                             Switch(
                                 checked = useBiometrics,
+                                enabled = !isLoading,
                                 onCheckedChange = { useBiometrics = it }
                             )
                         }
@@ -335,11 +335,10 @@ fun LoginScreen(
                         accountName = accountName.trim(),
                         containerName = containerName.trim(),
                         authType = authType,
-                        accountKey = accountKey.trim(),
-                        sasToken = sasToken.trim(),
-                        tenantId = tenantId.trim(),
-                        clientId = clientId.trim(),
-                        clientSecret = clientSecret.trim(),
+                        accountKey = if (authType == AuthType.SHARED_KEY) accountKey.trim() else "",
+                        sasToken = if (authType == AuthType.SAS_TOKEN) sasToken.trim() else "",
+                        tenantId = if (authType == AuthType.ENTRA_ID) tenantId.trim() else "",
+                        clientId = if (authType == AuthType.ENTRA_ID) clientId.trim() else "",
                         useBiometrics = useBiometrics
                     )
                     
@@ -352,18 +351,23 @@ fun LoginScreen(
                     errorMessage = null
                     
                     coroutineScope.launch {
+                        val previousConfig = azureBlobClient.getCurrentConfig()
                         try {
+                            val connectedConfig = if (config.authType == AuthType.ENTRA_ID) {
+                                azureBlobClient.signInEntra(activity, config)
+                            } else config
                             // Temporary update client configuration to test it
-                            azureBlobClient.updateConfig(config)
+                            azureBlobClient.updateConfig(connectedConfig)
                             
                             // Test connection by attempting to list 1 blob
                             azureBlobClient.listBlobs(prefix = "", maxResults = 1)
                             
                             // Success! Save config securely
-                            securityManager.saveConfig(config)
+                            securityManager.saveConfig(connectedConfig)
                             onLoginSuccess()
                         } catch (e: Exception) {
-                            e.printStackTrace()
+                            azureBlobClient.updateConfig(previousConfig)
+                            if (e is kotlinx.coroutines.CancellationException) throw e
                             val details = e.localizedMessage ?: context.getString(R.string.login_error_unknown)
                             errorMessage = context.getString(R.string.login_error_connection_failed, details)
                             isLoading = false
@@ -384,7 +388,7 @@ fun LoginScreen(
                     )
                 } else {
                     Text(
-                        text = stringResource(R.string.login_btn_connect),
+                        text = stringResource(if (authType == AuthType.ENTRA_ID) R.string.login_btn_microsoft else R.string.login_btn_connect),
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Bold
                     )

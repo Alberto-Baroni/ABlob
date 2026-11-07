@@ -25,8 +25,9 @@
     <string name="login_sas_placeholder">\?sv=2020-08-04&amp;ss=b&amp;srt=co&amp;sp=rwdl...</string>
     <string name="login_tenant_id">Tenant ID (Azure AD)</string>
     <string name="login_client_id">Client ID (App Registration)</string>
-    <string name="login_client_secret">Client Secret</string>
-    <string name="login_view_secret">Visualizza segreto</string>
+    <string name="login_entra_help">Accedi con il tuo account Microsoft aziendale o scolastico. Usa il tuo tenant e una registrazione app di tipo client pubblico. Il tuo utente deve avere accesso al container Blob selezionato.</string>
+    <string name="login_btn_microsoft">Accedi con Microsoft</string>
+    <string name="login_entra_redirect_help">Registra questo URI di reindirizzamento nella tua registrazione app Entra (seleziona e copia):</string>
     <string name="login_enable_biometric">Abilita Impronta Digitale</string>
     <string name="login_enable_biometric_sub">Accedi rapidamente all\'avvio</string>
     <string name="login_error_fields_required">Per favore compila tutti i campi richiesti.</string>
